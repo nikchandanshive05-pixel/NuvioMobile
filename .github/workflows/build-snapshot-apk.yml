@@ -1,0 +1,67 @@
+name: Build Snapshot APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      upstream_branch:
+        description: 'Branch from tapframe/NuvioMobile to build'
+        required: true
+        default: 'cmp-rewrite'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build Latest Snapshot APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code from Upstream
+        uses: actions/checkout@v4
+        with:
+          repository: 'tapframe/NuvioMobile'
+          ref: ${{ github.event.inputs.upstream_branch }}
+          fetch-depth: 0
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+
+      - name: Prepare Runtime Properties
+        run: |
+          touch local.properties
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Build Full Debug APK
+        run: ./gradlew :androidApp:assembleFullDebug -Pnuvio.android.distribution=full -Pnuvio.ios.distribution=appstore --stacktrace
+
+      - name: Upload Debug APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NuvioMobile-Snapshot-APK
+          path: androidApp/build/outputs/apk/full/debug/*.apk
+          retention-days: 7
+
+      - name: Create GitHub Snapshot Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: "snapshot-${{ github.run_id }}"
+          name: "NuvioMobile Snapshot (${{ github.event.inputs.upstream_branch }})"
+          body: |
+            ### Latest Bleeding-Edge Snapshot of NuvioMobile
+            - **Source**: Directly checked out and compiled from `tapframe/NuvioMobile@${{ github.event.inputs.upstream_branch }}`
+            - **Run ID**: `${{ github.run_id }}`
+            - **Architecture**: Universal Full Debug APK
+          draft: false
+          prerelease: true
+          files: androidApp/build/outputs/apk/full/debug/*.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
