@@ -155,6 +155,9 @@ final class MPVPlayerBridgeImpl: NSObject, NuvioPlayerBridge {
     }
 
     func selectAudioTrack(trackId: Int32) { playerVC?.selectAudio(Int(trackId)) }
+    func applyAudioLanguagePreferences(languages: [String]) {
+        ensurePlayerViewController().applyAudioLanguagePreferences(languages)
+    }
     func selectSubtitleTrack(trackId: Int32) { playerVC?.selectSubtitle(Int(trackId)) }
     func setSubtitleUrl(url: String) { playerVC?.addSubtitleUrl(url) }
     func clearExternalSubtitle() { playerVC?.removeExternalSubtitles() }
@@ -167,7 +170,8 @@ final class MPVPlayerBridgeImpl: NSObject, NuvioPlayerBridge {
         outlineSize: Float,
         bold: Bool,
         fontSize: Float,
-        subPos: Int32
+        subPos: Int32,
+        stripSdh: Bool
     ) {
         playerVC?.applySubtitleStyle(
             textColor: textColor,
@@ -176,7 +180,8 @@ final class MPVPlayerBridgeImpl: NSObject, NuvioPlayerBridge {
             outlineSize: outlineSize,
             bold: bold,
             fontSize: fontSize,
-            subPos: Int(subPos)
+            subPos: Int(subPos),
+            stripSdh: stripSdh
         )
     }
 
@@ -189,6 +194,7 @@ final class MPVPlayerBridgeImpl: NSObject, NuvioPlayerBridge {
     func getBufferedMs() -> Int64 { return playerVC?.bufferedMs ?? 0 }
     func getPlaybackSpeed() -> Float { playerVC?.currentSpeed ?? 1.0 }
     func getErrorMessage() -> String { playerVC?.currentErrorMessage ?? "" }
+    func getProperty(name: String) -> String { playerVC?.getString(name) ?? "" }
 
     func destroy() {
         playerVC?.destroyPlayer()
@@ -255,6 +261,7 @@ final class MPVPlayerViewController: UIViewController {
 
     private let errorStateLock = NSLock()
     private var metalLayer = MetalLayer()
+    private var pictureInPictureController: PlayerPictureInPictureController?
     private var lastAppliedDrawableSize: CGSize = .zero
     private var externallyManagedViewSize: CGSize?
     private var pendingSurfaceLayoutWorkItems: [DispatchWorkItem] = []
@@ -263,9 +270,19 @@ final class MPVPlayerViewController: UIViewController {
     private var mpv: OpaquePointer?
     private var cachedNowPlayingMetadata: CachedNowPlayingMetadata?
     private lazy var nowPlayingController = PlayerNowPlayingController(owner: self)
+    private lazy var audioSessionController: PlayerAudioSessionController = {
+        let controller = PlayerAudioSessionController()
+        controller.onConfigurationChanged = { [weak self] in
+            guard let self, self.mpv != nil else { return }
+            self.publishCachedNowPlayingInfoIfNeeded()
+            self.syncNowPlayingPlaybackState(isPlaying: self.isPlayerPlaying)
+        }
+        return controller
+    }()
     private lazy var eventQueue = DispatchQueue(label: "mpv-events", qos: .userInitiated)
     private var recentPlaybackLogs: [String] = []
     private var activeRequestHeaders: [String: String] = [:]
+    private var preferredAudioLanguages: [String] = []
 
     // Cached track lists
     var audioTracks: [TrackInfo] = []
@@ -320,6 +337,9 @@ final class MPVPlayerViewController: UIViewController {
         metalLayer.wantsExtendedDynamicRangeContent = true
         metalLayer.anchorPoint = CGPoint(x: 0, y: 0)
         metalLayer.position = .zero
+        let pip = PlayerPictureInPictureController(owner: self, metalLayer: metalLayer)
+        pictureInPictureController = pip
+        view.layer.addSublayer(pip.displayLayer)
         view.layer.addSublayer(metalLayer)
         layoutMetalLayer()
 
@@ -327,6 +347,10 @@ final class MPVPlayerViewController: UIViewController {
         activateAudioSessionForPlayback()
         setupNotifications()
         refreshImmersiveSystemUI()
+    }
+
+    func setPictureInPicturePlaceholderVisible(_ visible: Bool) {
+        SystemUI.shared.setPictureInPicturePlaceholder(self, visible: visible)
     }
 
     override func viewWillAppear(_ animated: Bool) {
@@ -342,12 +366,25 @@ final class MPVPlayerViewController: UIViewController {
 
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
+        SystemUI.shared.playerDidBecomeVisible(self)
         refreshImmersiveSystemUI()
         becomeFirstResponder()
         UIApplication.shared.beginReceivingRemoteControlEvents()
         publishCachedNowPlayingInfoIfNeeded()
         syncVideoSurfaceLayout()
         attemptStartPendingLoad()
+    }
+
+    override func viewWillDisappear(_ animated: Bool) {
+        SystemUI.shared.playerDidBecomeHidden(self)
+        super.viewWillDisappear(animated)
+    }
+
+    override func didMove(toParent parent: UIViewController?) {
+        super.didMove(toParent: parent)
+        if parent == nil {
+            SystemUI.shared.playerDidBecomeHidden(self)
+        }
     }
 
     override func viewSafeAreaInsetsDidChange() {
@@ -445,6 +482,7 @@ final class MPVPlayerViewController: UIViewController {
         metalLayer.contentsScale = scale
         metalLayer.position = .zero
         metalLayer.bounds = CGRect(origin: .zero, size: bounds.size)
+        pictureInPictureController?.displayLayer.frame = bounds
         if drawableSize != lastAppliedDrawableSize {
             // mpv's moltenvk context polls drawableSize and resizes its swapchain.
             metalLayer.drawableSize = drawableSize
@@ -481,12 +519,14 @@ final class MPVPlayerViewController: UIViewController {
         checkError(mpv_set_option_string(mpv, "video-rotate", "no"))
         checkError(mpv_set_option_string(mpv, "subs-match-os-language", "yes"))
         checkError(mpv_set_option_string(mpv, "subs-fallback", "yes"))
+        configureBundledSubtitleFont()
         checkError(mpv_set_option_string(mpv, "keep-open", "yes"))
         checkError(mpv_set_option_string(mpv, "target-colorspace-hint", "yes"))
         checkError(mpv_set_option_string(mpv, "tone-mapping", "auto"))
         checkError(mpv_set_option_string(mpv, "hdr-compute-peak", "yes"))
 
         checkError(mpv_initialize(mpv))
+        applyAudioLanguagePreferences(preferredAudioLanguages)
 
         // Observe properties
         mpv_observe_property(mpv, 0, "pause", MPV_FORMAT_FLAG)
@@ -494,12 +534,30 @@ final class MPVPlayerViewController: UIViewController {
         mpv_observe_property(mpv, 0, "core-idle", MPV_FORMAT_FLAG)
         mpv_observe_property(mpv, 0, "eof-reached", MPV_FORMAT_FLAG)
         mpv_observe_property(mpv, 0, "seeking", MPV_FORMAT_FLAG)
-        mpv_observe_property(mpv, 0, "track-list/count", MPV_FORMAT_INT64)
+        mpv_observe_property(mpv, 0, "track-list", MPV_FORMAT_NODE)
+        mpv_observe_property(mpv, 0, "aid", MPV_FORMAT_INT64)
 
         mpv_set_wakeup_callback(mpv, { ctx in
             let vc = unsafeBitCast(ctx, to: MPVPlayerViewController.self)
             vc.readEvents()
         }, UnsafeMutableRawPointer(Unmanaged.passUnretained(self).toOpaque()))
+    }
+
+    private func configureBundledSubtitleFont() {
+        guard let fontURL = Bundle.main.url(
+            forResource: "NotoSansCJKsc-Regular",
+            withExtension: "otf"
+        ) else {
+            print("[MPV] Bundled CJK subtitle font is missing")
+            return
+        }
+
+        let fontDirectory = fontURL.deletingLastPathComponent().path
+        fontDirectory.withCString { path in
+            checkError(mpv_set_option_string(mpv, "sub-fonts-dir", path))
+        }
+        checkError(mpv_set_option_string(mpv, "sub-font", "Noto Sans CJK SC"))
+        print("[MPV] Using bundled CJK subtitle font: \(fontURL.lastPathComponent)")
     }
 
     private func setupNotifications() {
@@ -511,13 +569,24 @@ final class MPVPlayerViewController: UIViewController {
 
     @objc private func enterBackground() {
         guard mpv != nil else { return }
+        if pictureInPictureController?.enteredBackground() == true { return }
+        pauseBackgroundPlayback()
+    }
+
+    func pauseBackgroundPlayback() {
         pausePlayback()
         setStringProperty("vid", "no")
     }
 
+    func restoreBackgroundVideo() {
+        setStringProperty("vid", "auto")
+    }
+
     @objc private func enterForeground() {
         guard mpv != nil else { return }
-        setStringProperty("vid", "auto")
+        let wasInPictureInPicture = pictureInPictureController?.enteredForeground() == true
+        if wasInPictureInPicture { return }
+        restoreBackgroundVideo()
         playPlayback()
     }
 
@@ -570,6 +639,7 @@ final class MPVPlayerViewController: UIViewController {
         applyRequestHeaders(sanitizedHeaders)
         isPlayerLoading = true
         isPlayerEnded = false
+        applyAudioLanguagePreferences(preferredAudioLanguages)
         command("loadfile", args: [request.urlString, "replace"])
         if let audioUrl = request.audioUrl, !audioUrl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
@@ -723,6 +793,16 @@ final class MPVPlayerViewController: UIViewController {
         mpv_set_property(mpv, "aid", MPV_FORMAT_INT64, &id)
     }
 
+    func applyAudioLanguagePreferences(_ languages: [String]) {
+        preferredAudioLanguages = languages
+        guard mpv != nil else { return }
+        setStringProperty("alang", languages.joined(separator: ","))
+        if let currentId = getString("aid"), Int(currentId) != nil {
+            setStringProperty("aid", currentId)
+        }
+        setStringProperty("aid", "auto")
+    }
+
     func selectSubtitle(_ trackId: Int) {
         guard mpv != nil else { return }
         if trackId < 0 {
@@ -803,7 +883,8 @@ final class MPVPlayerViewController: UIViewController {
         outlineSize: Float,
         bold: Bool,
         fontSize: Float,
-        subPos: Int
+        subPos: Int,
+        stripSdh: Bool
     ) {
         guard mpv != nil else { return }
 
@@ -822,9 +903,13 @@ final class MPVPlayerViewController: UIViewController {
 
         var position = Int64(subPos)
         checkError(mpv_set_property(mpv, "sub-pos", MPV_FORMAT_INT64, &position))
+        setStringProperty("sub-filter-sdh", stripSdh ? "yes" : "no")
+        setStringProperty("sub-filter-sdh-harder", stripSdh ? "yes" : "no")
     }
 
     func destroyPlayer() {
+        pictureInPictureController?.invalidate()
+        pictureInPictureController = nil
         NotificationCenter.default.removeObserver(self)
         UIApplication.shared.endReceivingRemoteControlEvents()
         resignFirstResponder()
@@ -842,21 +927,11 @@ final class MPVPlayerViewController: UIViewController {
     }
 
     private func activateAudioSessionForPlayback() {
-        do {
-            let session = AVAudioSession.sharedInstance()
-            try session.setCategory(.playback, mode: .moviePlayback)
-            try session.setActive(true)
-        } catch {
-            print("[NowPlaying] Failed to activate audio session: \(error)")
-        }
+        audioSessionController.activate()
     }
 
     private func deactivateAudioSession() {
-        do {
-            try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
-        } catch {
-            print("[NowPlaying] Failed to deactivate audio session: \(error)")
-        }
+        audioSessionController.deactivate()
     }
 
     // MARK: - State Update
@@ -890,6 +965,7 @@ final class MPVPlayerViewController: UIViewController {
     }
 
     private func syncNowPlayingPlaybackState(isPlaying: Bool) {
+        pictureInPictureController?.updatePlaybackState()
         nowPlayingController.syncPlayback(
             positionMs: positionMs,
             durationMs: durationMs,
@@ -1188,7 +1264,7 @@ final class MPVPlayerViewController: UIViewController {
         return data
     }
 
-    private func getString(_ name: String) -> String? {
+    fileprivate func getString(_ name: String) -> String? {
         guard mpv != nil else { return nil }
         let cstr = mpv_get_property_string(mpv, name)
         let str: String? = cstr == nil ? nil : String(cString: cstr!)

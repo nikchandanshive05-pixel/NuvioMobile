@@ -58,6 +58,19 @@ internal fun buildNuvioEngineConfig(
     streamInactivityTimeoutMilliseconds = 0,
 )
 
+internal fun migrateNestedPayloadDirectory(cacheDirectory: File) {
+    val payloadDirectory = File(cacheDirectory, "payload")
+    val nestedDirectory = File(payloadDirectory, "payload")
+    val entries = nestedDirectory.listFiles() ?: return
+    entries.forEach { entry ->
+        val target = File(payloadDirectory, entry.name)
+        if (target.exists() || !entry.renameTo(target)) {
+            entry.deleteRecursively()
+        }
+    }
+    nestedDirectory.deleteRecursively()
+}
+
 internal fun unexpectedStreamStopError(
     requestId: Long,
     eventStreamId: String?,
@@ -66,6 +79,25 @@ internal fun unexpectedStreamStopError(
     fallbackMessage: String,
 ): P2pStreamingState.Error? {
     if (requestId != 0L || currentStreamId == null || eventStreamId != currentStreamId) {
+        return null
+    }
+    return P2pStreamingState.Error(
+        message?.trim()?.takeIf(String::isNotEmpty) ?: fallbackMessage,
+    )
+}
+
+internal fun unexpectedTorrentError(
+    requestId: Long,
+    eventTorrentId: String?,
+    currentTorrentId: String?,
+    message: String?,
+    fallbackMessage: String,
+): P2pStreamingState.Error? {
+    if (requestId != 0L ||
+        eventTorrentId == null ||
+        currentTorrentId == null ||
+        eventTorrentId != currentTorrentId
+    ) {
         return null
     }
     return P2pStreamingState.Error(
@@ -125,21 +157,13 @@ actual object P2pStreamingEngine {
             _cacheState.value = _cacheState.value.copy(isClearing = true)
             try {
                 val activeEngine = ensureEngine()
-                if (!_cacheState.value.hasMeasurement) {
-                    delay(DIAGNOSTIC_SAMPLE_INTERVAL_MS + 100L)
-                    val initial = activeEngine.stats.value
-                    updateCacheState(
-                        initial.diskCacheUsedBytes,
-                        initial.diskCacheProtectedBytes,
-                    )
-                }
                 val before = activeEngine.stats.value
                 activeEngine.reclaimDiskCache(0L)
                 delay(DIAGNOSTIC_SAMPLE_INTERVAL_MS + 100L)
                 val after = activeEngine.stats.value
                 updateCacheState(after.diskCacheUsedBytes, after.diskCacheProtectedBytes)
                 P2pCacheClearResult(
-                    reclaimedBytes = (before.diskCacheUsedBytes - after.diskCacheUsedBytes)
+                    reclaimedBytes = (after.diskCacheReclaimedBytes - before.diskCacheReclaimedBytes)
                         .coerceAtLeast(0L),
                     remainingBytes = after.diskCacheUsedBytes,
                     protectedBytes = after.diskCacheProtectedBytes,
@@ -448,13 +472,14 @@ actual object P2pStreamingEngine {
         currentCoroutineContext().ensureActive()
         val context = requireContext()
         val stateDirectory = File(context.noBackupFilesDir, "nuvio-engine/state")
-        val cacheDirectory = File(context.cacheDir, "nuvio-engine/payload")
+        val cacheDirectory = File(context.cacheDir, "nuvio-engine")
         check(stateDirectory.mkdirs() || stateDirectory.isDirectory) {
             "Could not create the Nuvio Engine state directory"
         }
         check(cacheDirectory.mkdirs() || cacheDirectory.isDirectory) {
             "Could not create the Nuvio Engine cache directory"
         }
+        migrateNestedPayloadDirectory(cacheDirectory)
         return NuvioEngine.create(
             buildNuvioEngineConfig(
                 stateDirectory = stateDirectory,
@@ -506,6 +531,13 @@ actual object P2pStreamingEngine {
     private fun observeEngineEvents(activeEngine: NuvioEngine) {
         engineEventsJob?.cancel()
         engineEventsJob = scope.launch {
+            launch {
+                activeEngine.stats.collect { stats ->
+                    if (engine === activeEngine) {
+                        updateCacheState(stats.diskCacheUsedBytes, stats.diskCacheProtectedBytes)
+                    }
+                }
+            }
             activeEngine.events.collect { event ->
                 Log.i(
                     DIAGNOSTIC_TAG,
@@ -517,16 +549,16 @@ actual object P2pStreamingEngine {
                 if (engine !== activeEngine) return@collect
                 when (event.type) {
                     NuvioEventType.TorrentError -> {
-                        if (event.requestId != 0L) return@collect
-                        val terminalError = P2pStreamingState.Error(
-                            event.message ?: localizedP2pUnknownTorrentError()
-                        )
+                        val fallbackMessage = localizedP2pUnknownTorrentError()
                         synchronized(lifecycleLock) {
-                            if (engine !== activeEngine ||
-                                (event.torrentId != null && event.torrentId != currentTorrentId)
-                            ) {
-                                return@synchronized
-                            }
+                            if (engine !== activeEngine) return@synchronized
+                            val terminalError = unexpectedTorrentError(
+                                requestId = event.requestId,
+                                eventTorrentId = event.torrentId,
+                                currentTorrentId = currentTorrentId,
+                                message = event.message,
+                                fallbackMessage = fallbackMessage,
+                            ) ?: return@synchronized
                             streamGeneration += 1
                             statsJob?.cancel()
                             statsJob = null
@@ -583,10 +615,6 @@ actual object P2pStreamingEngine {
                         null
                     }
                     val aggregate = activeEngine.stats.value
-                    updateCacheState(
-                        aggregate.diskCacheUsedBytes,
-                        aggregate.diskCacheProtectedBytes,
-                    )
                     val nowMs = SystemClock.elapsedRealtime()
                     if (nowMs >= nextDiagnosticSampleAtMs) {
                         nextDiagnosticSampleAtMs = nowMs + DIAGNOSTIC_SAMPLE_INTERVAL_MS

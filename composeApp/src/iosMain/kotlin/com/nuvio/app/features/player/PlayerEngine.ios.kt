@@ -54,6 +54,7 @@ actual fun PlatformPlayerSurface(
     initialPositionMs: Long?,
     initialPositionRequestKey: String?,
     resizeMode: PlayerResizeMode,
+    playbackEngine: AndroidPlaybackEngine?,
     useNativeController: Boolean,
     onInitialPositionHandled: (key: String, handled: Boolean) -> Unit,
     onControllerReady: (PlayerEngineController) -> Unit,
@@ -194,6 +195,13 @@ actual fun PlatformPlayerSurface(
                 }
             }
 
+            override fun applyAudioLanguagePreferences(languages: List<String>) {
+                bridge.applyAudioLanguagePreferences(languages)
+            }
+
+            override suspend fun getMediaInfo(): PlayerMediaInfo =
+                mpvMediaInfo { name -> bridge.getProperty(name).ifBlank { null } }
+
             override fun selectSubtitleTrack(index: Int) {
                 if (index < 0) {
                     bridge.selectSubtitleTrack(-1) // disable
@@ -269,6 +277,7 @@ actual fun PlatformPlayerSurface(
                     bold = style.bold,
                     fontSize = style.toMpvSubtitleFontSize(),
                     subPos = style.toMpvSubtitlePosition(),
+                    stripSdh = style.stripSdh,
                 )
             }
         }
@@ -438,7 +447,7 @@ private fun SubtitleStyleState.toMpvSubtitlePosition(): Int =
     (100 - (bottomOffset / 2)).coerceIn(0, 150)
 
 private fun SubtitleStyleState.toMpvSubtitleFontSize(): Float =
-    (fontSizeSp * 3f).coerceIn(24f, 96f)
+    (fontSizeSp * 3f).coerceIn(18f, 96f)
 
 private fun Int.toHexByte(): String {
     val digits = "0123456789ABCDEF"

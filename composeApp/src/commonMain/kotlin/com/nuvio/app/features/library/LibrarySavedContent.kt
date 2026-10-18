@@ -10,9 +10,11 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.nuvio.app.core.i18n.localizedMediaTypeLabel
+import com.nuvio.app.core.poster.withCustomPosterUrl
 import com.nuvio.app.core.ui.NuvioDropdownChip
 import com.nuvio.app.core.ui.NuvioDropdownOption
 import com.nuvio.app.features.home.MetaPreview
@@ -27,7 +29,9 @@ import nuvio.composeapp.generated.resources.library_sort_added_asc
 import nuvio.composeapp.generated.resources.library_sort_added_desc
 import nuvio.composeapp.generated.resources.library_sort_title_asc
 import nuvio.composeapp.generated.resources.library_sort_title_desc
-import nuvio.composeapp.generated.resources.library_sort_trakt_order
+import nuvio.composeapp.generated.resources.library_sort_provider_order
+import nuvio.composeapp.generated.resources.library_sort_released_asc
+import nuvio.composeapp.generated.resources.library_sort_released_desc
 import org.jetbrains.compose.resources.stringResource
 
 @Composable
@@ -48,7 +52,7 @@ internal fun LibrarySavedControls(
         modifier = modifier.horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        if (layoutMode == LibraryLayoutMode.VERTICAL && sourceMode == LibrarySourceMode.TRAKT) {
+        if (layoutMode == LibraryLayoutMode.VERTICAL && sourceMode.isRemoteTrackingSource) {
             val selectedSection = verticalProjection.availableSections
                 .firstOrNull { section -> section.type == verticalProjection.selectedSectionKey }
             NuvioDropdownChip(
@@ -106,6 +110,7 @@ internal fun LazyListScope.libraryVerticalContent(
     columns: Int,
     watchedKeys: Set<String>,
     fullyWatchedSeriesKeys: Set<String>,
+    posterPattern: String,
     onPosterClick: ((LibraryItem) -> Unit)?,
     onPosterLongClick: ((LibraryItem, LibrarySection) -> Unit)?,
 ) {
@@ -116,8 +121,15 @@ internal fun LazyListScope.libraryVerticalContent(
             "library-vertical:${firstEntry.item.type}:${firstEntry.item.id}"
         },
     ) { rowEntries ->
+        val resolvedItems = remember(rowEntries, posterPattern) {
+            rowEntries.map { entry ->
+                entry.item.toMetaPreview().let {
+                    if (posterPattern.isNotBlank()) it.withCustomPosterUrl(posterPattern) else it
+                }
+            }
+        }
         PosterGridRow(
-            items = rowEntries.map { entry -> entry.item.toMetaPreview() },
+            items = resolvedItems,
             columns = columns,
             modifier = libraryContentTransitionModifier()
                 .padding(horizontal = 16.dp),
@@ -158,9 +170,11 @@ internal fun LazyItemScope.libraryContentTransitionModifier(): Modifier =
 @Composable
 private fun librarySortOptionLabel(option: LibrarySortOption): String =
     when (option) {
-        LibrarySortOption.DEFAULT -> stringResource(Res.string.library_sort_trakt_order)
+        LibrarySortOption.DEFAULT -> stringResource(Res.string.library_sort_provider_order)
         LibrarySortOption.ADDED_DESC -> stringResource(Res.string.library_sort_added_desc)
         LibrarySortOption.ADDED_ASC -> stringResource(Res.string.library_sort_added_asc)
+        LibrarySortOption.RELEASED_DESC -> stringResource(Res.string.library_sort_released_desc)
+        LibrarySortOption.RELEASED_ASC -> stringResource(Res.string.library_sort_released_asc)
         LibrarySortOption.TITLE_ASC -> stringResource(Res.string.library_sort_title_asc)
         LibrarySortOption.TITLE_DESC -> stringResource(Res.string.library_sort_title_desc)
     }

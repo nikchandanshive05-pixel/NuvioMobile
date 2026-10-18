@@ -8,6 +8,12 @@ internal data class SubtitleLanguageItem(
     val count: Int,
 )
 
+internal enum class SubtitleOptionsRailEmptyContent {
+    NONE,
+    LOADING,
+    FETCH,
+}
+
 internal sealed interface SubtitleSelectionOption {
     val id: String
 
@@ -20,9 +26,34 @@ internal sealed interface SubtitleSelectionOption {
     data class Addon(
         val subtitle: AddonSubtitle,
     ) : SubtitleSelectionOption {
-        override val id: String = "addon:${subtitle.addonName}:${subtitle.id}:${subtitle.url}"
+        override val id: String = "addon:${subtitle.addonName}:${subtitle.id}:${subtitle.selectionKey}"
     }
 }
+
+internal val AddonSubtitle.selectionKey: String
+    get() = url.takeIf { it.isNotBlank() } ?: listOfNotNull(addonName, id).joinToString(":")
+
+internal fun AddonSubtitle.matchesSelection(selectedId: String?): Boolean {
+    if (selectedId.isNullOrBlank()) return false
+    return url == selectedId || id == selectedId || selectionKey == selectedId
+}
+
+internal fun List<AddonSubtitle>.findSelectedAddon(selectedId: String?): AddonSubtitle? {
+    if (selectedId.isNullOrBlank()) return null
+    firstOrNull { it.url == selectedId }?.let { return it }
+    firstOrNull { it.selectionKey == selectedId }?.let { return it }
+    return firstOrNull { it.id == selectedId }
+}
+
+internal fun subtitleTracksStructureKey(tracks: List<SubtitleTrack>): String =
+    tracks.joinToString("\u0001") { track ->
+        "${track.index}\u0000${track.id}\u0000${track.language}\u0000${track.label}\u0000${track.isForced}"
+    }
+
+internal fun addonSubtitlesStructureKey(subtitles: List<AddonSubtitle>): String =
+    subtitles.joinToString("\u0001") { subtitle ->
+        "${subtitle.id}\u0000${subtitle.selectionKey}\u0000${subtitle.language}\u0000${subtitle.addonName}\u0000${subtitle.display}"
+    }
 
 internal fun buildSubtitleLanguageItems(
     subtitleTracks: List<SubtitleTrack>,
@@ -80,6 +111,21 @@ internal fun buildSubtitleSelectionOptions(
     return builtInOptions + addonOptions
 }
 
+internal fun subtitleOptionsRailEmptyContent(
+    selectedLanguageKey: String,
+    hasAvailableLanguages: Boolean,
+    isLoadingAddonSubtitles: Boolean,
+): SubtitleOptionsRailEmptyContent {
+    if (selectedLanguageKey == SubtitleOffLanguageKey && hasAvailableLanguages) {
+        return SubtitleOptionsRailEmptyContent.NONE
+    }
+    return if (isLoadingAddonSubtitles) {
+        SubtitleOptionsRailEmptyContent.LOADING
+    } else {
+        SubtitleOptionsRailEmptyContent.FETCH
+    }
+}
+
 internal fun selectedSubtitleLanguageKey(
     subtitleTracks: List<SubtitleTrack>,
     selectedSubtitleIndex: Int,
@@ -98,7 +144,7 @@ internal fun selectedSubtitleOptionId(
     selectedSubtitleIndex: Int,
     selectedAddonSubtitle: AddonSubtitle?,
 ): String? {
-    selectedAddonSubtitle?.let { return SubtitleSelectionOption.Addon(it).id }
+    selectedAddonSubtitle?.let { subtitle -> return SubtitleSelectionOption.Addon(subtitle).id }
     return subtitleTracks
         .firstOrNull { it.index == selectedSubtitleIndex }
         ?.let { SubtitleSelectionOption.BuiltIn(it) }

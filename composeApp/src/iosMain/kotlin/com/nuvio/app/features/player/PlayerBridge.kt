@@ -59,6 +59,7 @@ interface NuvioPlayerBridge {
     fun getSubtitleTrackLang(at: Int): String
     fun isSubtitleTrackSelected(at: Int): Boolean
     fun selectAudioTrack(trackId: Int)
+    fun applyAudioLanguagePreferences(languages: List<String>)
     fun selectSubtitleTrack(trackId: Int)
     fun setSubtitleUrl(url: String)
     fun clearExternalSubtitle()
@@ -72,6 +73,7 @@ interface NuvioPlayerBridge {
         bold: Boolean,
         fontSize: Float,
         subPos: Int,
+        stripSdh: Boolean,
     )
     fun getIsLoading(): Boolean
     fun getIsPlaying(): Boolean
@@ -81,6 +83,7 @@ interface NuvioPlayerBridge {
     fun getBufferedMs(): Long
     fun getPlaybackSpeed(): Float
     fun getErrorMessage(): String
+    fun getProperty(name: String): String
     fun destroy()
 }
 
