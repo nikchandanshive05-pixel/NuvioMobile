@@ -16,7 +16,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import kotlinx.datetime.Clock
+import com.nuvio.app.features.watchprogress.WatchProgressClock
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -238,7 +238,7 @@ object CloudstreamScraperRunner {
 
     private suspend fun getOrRefreshTHashCookie(): String {
         sessionMutex.withLock {
-            val now = Clock.System.now().toEpochMilliseconds()
+            val now = WatchProgressClock.nowEpochMs()
             if (!cachedTHashCookie.isNullOrBlank() && now < tHashCookieExpiryEpochMs) {
                 return cachedTHashCookie!!
             }
@@ -282,7 +282,7 @@ object CloudstreamScraperRunner {
 
     private suspend fun getOrRefreshUserToken(): String {
         sessionMutex.withLock {
-            val now = Clock.System.now().toEpochMilliseconds()
+            val now = WatchProgressClock.nowEpochMs()
             if (!cachedUserToken.isNullOrBlank() && now < userTokenExpiryEpochMs) {
                 return cachedUserToken!!
             }
@@ -321,7 +321,7 @@ object CloudstreamScraperRunner {
         season: Int?,
         episode: Int?,
     ): String? {
-        val unixTime = Clock.System.now().epochSeconds
+        val unixTime = WatchProgressClock.nowEpochMs() / 1000L
         val encodedTitle = urlEncode(title.trim())
         val path = if (endpointPrefix.isBlank()) "search.php" else "$endpointPrefix/search.php"
         val searchUrl = "$NETMIRROR_BASE/mobile/$path?s=$encodedTitle&t=$unixTime"

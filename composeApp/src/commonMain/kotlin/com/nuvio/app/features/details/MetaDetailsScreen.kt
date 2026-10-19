@@ -175,7 +175,7 @@ import org.jetbrains.compose.resources.stringResource
 private val watchedMarkerDiagnosticLog = Logger.withTag("WatchedMarkerDiag")
 
 @Composable
-@OptIn(ExperimentalSharedTransitionApi::class)
+@OptIn(ExperimentalSharedTransitionApi::class, ExperimentalMaterial3Api::class)
 fun MetaDetailsScreen(
     type: String,
     id: String,
