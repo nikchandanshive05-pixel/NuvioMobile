@@ -53,11 +53,17 @@ jobs:
           path: build_log.txt
           retention-days: 7
 
+      - name: Locate and Package APK
+        run: |
+          mkdir -p release-apk
+          find . -name "*.apk" -type f -exec cp {} release-apk/ \;
+          ls -la release-apk/
+
       - name: Upload Debug APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: Nuvio-Cloudstream-Unified-APK
-          path: androidApp/build/outputs/apk/full/debug/*.apk
+          path: release-apk/*.apk
           retention-days: 14
 
       - name: Create GitHub Release
@@ -70,15 +76,16 @@ jobs:
             ### 🚀 Nuvio + Cloudstream Unified Mobile Streaming App
             
             **Key Features in this Release:**
-            - **Dual-Engine Streaming**: Stremio / Real-Debrid cached torrents + Cloudstream zero-cost web link extractors (`StreamTape`, `FileMoon`, `Mixdrop`).
-            - **Netflix-Style Visual Interface**: Modern OLED black `#121212` aesthetic, cinematic hero trailers, horizontal carousels, and frosted glass stream picker.
-            - **AndroidX Media3 & MPV**: Sub-second buffer initiation, hardware decoding, and ASS/SSA stylized subtitle rendering.
-            - **Universal Sync**: TMDB / Cinemeta catalog with Trakt & Simkl scrobbling.
+            - **CloudStream Provider Selector**: Switch between Unified Catalog and native providers (Netflix, Prime Video, HotStar) with one tap.
+            - **Uncluttered Details Screen**: Modern top action row (`Back`, `Cast`, `Notifications`, `Bookmark`, `Share`, `Search`).
+            - **Watch Status Modal**: Set watch status seamlessly (`Watching`, `Completed`, `On-Hold`, `Dropped`, `Plan to Watch`, `None`).
+            - **Dual-Engine Streaming**: Stremio / Real-Debrid cached torrents + Cloudstream direct web link extractors.
+            - **AndroidX Media3 & MPV**: Sub-second buffer initiation and hardware decoding.
             
             **Installation:**
-            Download the `.apk` file below and sideload it directly onto your Android device.
+            Download the `.apk` file below and install directly onto your Android device.
           draft: false
           prerelease: false
-          files: androidApp/build/outputs/apk/full/debug/*.apk
+          files: release-apk/*.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
