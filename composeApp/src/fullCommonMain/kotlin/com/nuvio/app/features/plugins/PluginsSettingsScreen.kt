@@ -380,8 +380,6 @@ fun PluginsSettingsPageContent(
                         Spacer(modifier = Modifier.width(8.dp))
                         NuvioInfoBadge(
                             text = if (uiState.nsfwEnabled) "18+ ACTIVE" else "OFF",
-                            containerColor = if (uiState.nsfwEnabled) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surfaceVariant,
-                            contentColor = if (uiState.nsfwEnabled) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                     Spacer(modifier = Modifier.height(2.dp))
