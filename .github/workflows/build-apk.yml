@@ -42,28 +42,13 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build Full Android APK
-        run: |
-          ./gradlew :androidApp:assembleFullDebug -Pnuvio.android.distribution=full -Pnuvio.ios.distribution=appstore --stacktrace --info 2>&1 | tee build_log.txt
-
-      - name: Upload Build Log on Failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: gradle-build-log
-          path: build_log.txt
-          retention-days: 7
-
-      - name: Locate and Package APK
-        run: |
-          mkdir -p release-apk
-          find . -name "*.apk" -type f -exec cp {} release-apk/ \;
-          ls -la release-apk/
+        run: ./gradlew :androidApp:assembleFullDebug -Pnuvio.android.distribution=full -Pnuvio.ios.distribution=appstore --stacktrace
 
       - name: Upload Debug APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: Nuvio-Cloudstream-Unified-APK
-          path: release-apk/*.apk
+          path: androidApp/build/outputs/apk/full/debug/*.apk
           retention-days: 14
 
       - name: Create GitHub Release
@@ -86,6 +71,6 @@ jobs:
             Download the `.apk` file below and install directly onto your Android device.
           draft: false
           prerelease: false
-          files: release-apk/*.apk
+          files: androidApp/build/outputs/apk/full/debug/*.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
