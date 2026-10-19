@@ -17,11 +17,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Done
-import androidx.compose.material.icons.filled.HourglassEmpty
-import androidx.compose.material.icons.filled.NotInterested
-import androidx.compose.material.icons.filled.PlayCircle
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -44,10 +43,10 @@ enum class WatchStatus(
     val label: String,
     val icon: ImageVector,
 ) {
-    Watching("Watching", Icons.Default.PlayCircle),
+    Watching("Watching", Icons.Default.PlayArrow),
     Completed("Completed", Icons.Default.CheckCircle),
-    OnHold("On-Hold", Icons.Default.HourglassEmpty),
-    Dropped("Dropped", Icons.Default.NotInterested),
+    OnHold("On-Hold", Icons.Default.Refresh),
+    Dropped("Dropped", Icons.Default.Close),
     PlanToWatch("Plan to Watch", Icons.Default.Bookmark),
     None("None", Icons.Default.Done),
 }

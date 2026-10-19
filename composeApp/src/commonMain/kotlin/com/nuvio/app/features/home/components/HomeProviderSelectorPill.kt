@@ -17,8 +17,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Movie
-import androidx.compose.material.icons.filled.Public
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -52,25 +51,25 @@ val defaultCloudstreamProviders = listOf(
         id = "unified",
         name = "Unified Catalog",
         subtitle = "Nuvio Aggregated (TMDB & Addons)",
-        icon = Icons.Default.Public,
+        icon = Icons.Default.PlayArrow,
     ),
     CloudStreamProviderChoice(
         id = "cnc_netflix",
         name = "CNC Verse - Netflix",
         subtitle = "Trending Netflix Releases & Originals",
-        icon = Icons.Default.Movie,
+        icon = Icons.Default.PlayArrow,
     ),
     CloudStreamProviderChoice(
         id = "cnc_prime",
         name = "CNC Verse - Prime Video",
         subtitle = "Amazon Prime Video Catalog & Top 10",
-        icon = Icons.Default.Movie,
+        icon = Icons.Default.PlayArrow,
     ),
     CloudStreamProviderChoice(
         id = "cnc_hotstar",
         name = "CNC Verse - HotStar",
         subtitle = "Disney+ HotStar & Regional Movies",
-        icon = Icons.Default.Movie,
+        icon = Icons.Default.PlayArrow,
     ),
 )
 
