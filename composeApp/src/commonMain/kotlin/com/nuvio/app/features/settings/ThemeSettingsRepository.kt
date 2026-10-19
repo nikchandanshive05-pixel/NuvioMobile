@@ -20,7 +20,7 @@ object ThemeSettingsRepository {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val _selectedThemePreference = MutableStateFlow<AppTheme?>(null)
     val selectedThemePreference: StateFlow<AppTheme?> = _selectedThemePreference.asStateFlow()
-    private val _selectedTheme = MutableStateFlow(AppTheme.WHITE)
+    private val _selectedTheme = MutableStateFlow(AppTheme.CRIMSON)
     val selectedTheme: StateFlow<AppTheme> = _selectedTheme.asStateFlow()
 
     private val _customThemePreference = MutableStateFlow(CustomThemeColors.Default)

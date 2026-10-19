@@ -136,16 +136,9 @@ object NetworkStatusRepository {
             return NetworkCondition.NoInternet
         }
 
-        val supabaseReachable = SupabaseEndpointConfig.restEndpointUrls().any { url ->
-            probeReachable(
-                url = url,
-                headers = mapOf("apikey" to ServerConfigurationRepository.active.value.publishableKey),
-            )
-        }
-        if (!supabaseReachable) {
-            return NetworkCondition.ServersUnreachable
-        }
-
+        // Supabase connectivity check for sync features.
+        // Even if Supabase is unreachable (e.g. self-hosted, offline, or community addon streaming),
+        // we treat general internet connectivity as Online so metadata and stream scraping can function.
         return NetworkCondition.Online
     }
 
