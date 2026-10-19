@@ -66,6 +66,19 @@ object TmdbService {
         return imdbId
     }
 
+    suspend fun fetchTitleAndYear(tmdbId: String, mediaType: String): Pair<String, Int?>? {
+        val apiKey = TmdbSettingsRepository.effectiveApiKey()
+        val numericId = tmdbId.toIntOrNull() ?: return null
+        val normalizedType = normalizeMediaType(mediaType)
+        val endpoint = if (normalizedType == "tv") "tv/$numericId" else "movie/$numericId"
+
+        val body = fetch<TmdbBasicDetailsResponse>(endpoint = endpoint, apiKey = apiKey) ?: return null
+        val title = (body.title ?: body.name)?.trim()?.takeIf(String::isNotBlank) ?: return null
+        val releaseDate = body.releaseDate ?: body.firstAirDate
+        val year = releaseDate?.take(4)?.toIntOrNull()
+        return title to year
+    }
+
     private suspend fun imdbToTmdb(imdbId: String, mediaType: String, apiKey: String): String? {
         val normalizedType = normalizeMediaType(mediaType)
         val cacheKey = "$imdbId:$normalizedType"
@@ -153,4 +166,12 @@ private data class TmdbExternalResult(
 @Serializable
 private data class TmdbExternalIdsResponse(
     @SerialName("imdb_id") val imdbId: String? = null,
+)
+
+@Serializable
+private data class TmdbBasicDetailsResponse(
+    val title: String? = null,
+    val name: String? = null,
+    @SerialName("release_date") val releaseDate: String? = null,
+    @SerialName("first_air_date") val firstAirDate: String? = null,
 )

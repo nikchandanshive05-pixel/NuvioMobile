@@ -167,8 +167,9 @@ internal fun PluginsUiState.toStoredPluginsState(): StoredPluginsState =
         scrapers = scrapers.map(PluginScraper::toStoredPluginScraper),
     )
 
-internal fun PluginScraper.toStoredPluginScraper(): StoredPluginScraper =
-    StoredPluginScraper(
+internal fun PluginScraper.toStoredPluginScraper(): StoredPluginScraper {
+    val isCsScraper = filename.endsWith(".cs3") || repositoryUrl.contains(".json")
+    return StoredPluginScraper(
         id = id,
         repositoryUrl = repositoryUrl,
         name = name,
@@ -182,14 +183,16 @@ internal fun PluginScraper.toStoredPluginScraper(): StoredPluginScraper =
         logo = logo,
         contentLanguage = contentLanguage,
         formats = formats,
-        code = null,
+        code = if (isCsScraper) code else null,
     )
+}
 
 internal fun StoredPluginScraper.restorePluginScraper(
     loadCachedCode: (String) -> String?,
 ): RestoredPluginScraper? {
+    val isCsScraper = filename.endsWith(".cs3") || repositoryUrl.contains(".json")
     val cachedCode = loadCachedCode(id)
-    val resolvedCode = cachedCode ?: code ?: return null
+    val resolvedCode = cachedCode ?: code ?: if (isCsScraper) filename else return null
     return RestoredPluginScraper(
         scraper = PluginScraper(
             id = id,
@@ -207,7 +210,7 @@ internal fun StoredPluginScraper.restorePluginScraper(
             formats = formats,
             code = resolvedCode,
         ),
-        requiresMigration = code != null,
+        requiresMigration = code != null && !isCsScraper,
     )
 }
 

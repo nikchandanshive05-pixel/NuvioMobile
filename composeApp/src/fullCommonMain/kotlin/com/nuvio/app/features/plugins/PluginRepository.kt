@@ -5,6 +5,8 @@ import com.nuvio.app.core.network.SupabaseProvider
 import com.nuvio.app.features.addons.httpGetText
 import com.nuvio.app.features.profiles.ProfileRepository
 import com.nuvio.app.features.tmdb.TmdbService
+import com.nuvio.app.features.plugins.cloudstream.CloudstreamRepositoryResolver
+import com.nuvio.app.features.plugins.cloudstream.CloudstreamScraperRunner
 import com.nuvio.app.features.plugins.runtime.PluginRuntime
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.query.Order
@@ -376,6 +378,23 @@ actual object PluginRepository {
             mediaType = mediaType,
         )
 
+        // Check if this scraper is a Cloudstream CS3 provider
+        val isCsProvider = scraper.filename.endsWith(".cs3") ||
+            scraper.repositoryUrl.contains(".json") ||
+            CloudstreamRepositoryResolver.isCloudstreamRepositoryUrl(scraper.repositoryUrl)
+
+        if (isCsProvider) {
+            return runCatching {
+                CloudstreamScraperRunner.execute(
+                    scraper = scraper,
+                    tmdbId = resolvedTmdbId,
+                    mediaType = normalizePluginType(mediaType),
+                    season = season,
+                    episode = episode,
+                )
+            }
+        }
+
         return runCatching {
             PluginRuntime.executePlugin(
                 code = scraper.code,
@@ -408,8 +427,18 @@ actual object PluginRepository {
     ): Pair<PluginRepositoryItem, List<PluginScraper>> {
         val storageProfileId = currentProfileId
         return withContext(Dispatchers.Default) {
-            val payload = httpGetText(manifestUrl)
-            val manifest = PluginManifestParser.parse(payload)
+            val isCsRepo = CloudstreamRepositoryResolver.isCloudstreamRepositoryUrl(manifestUrl)
+            val manifest = if (isCsRepo) {
+                CloudstreamRepositoryResolver.parseAsPluginManifest(manifestUrl)
+                    ?: run {
+                        val payload = httpGetText(manifestUrl)
+                        PluginManifestParser.parse(payload)
+                    }
+            } else {
+                val payload = httpGetText(manifestUrl)
+                PluginManifestParser.parse(payload)
+            }
+
             val baseUrl = manifestUrl.substringBefore("?").removeSuffix("/manifest.json")
 
             val scrapers = manifest.scrapers
@@ -421,17 +450,25 @@ actual object PluginRepository {
                         "$baseUrl/${info.filename.trimStart('/')}"
                     }
                     runCatching {
-                        val code = httpGetText(codeUrl)
                         val scraperId = "${manifestUrl.lowercase()}:${info.id}"
-                        val cached = PluginStorage.saveScraperCode(
-                            profileId = storageProfileId,
-                            scraperId = scraperId,
-                            code = code,
-                            overwrite = true,
-                        )
-                        if (!cached) {
-                            log.w { "Failed to cache plugin scraper $scraperId" }
+                        val isCsPlugin = info.filename.endsWith(".cs3") || isCsRepo
+                        val code = if (isCsPlugin) {
+                            // Store the .cs3 provider URL in the code field
+                            codeUrl
+                        } else {
+                            val downloadedCode = httpGetText(codeUrl)
+                            val cached = PluginStorage.saveScraperCode(
+                                profileId = storageProfileId,
+                                scraperId = scraperId,
+                                code = downloadedCode,
+                                overwrite = true,
+                            )
+                            if (!cached) {
+                                log.w { "Failed to cache plugin scraper $scraperId" }
+                            }
+                            downloadedCode
                         }
+
                         val previous = previousScrapers[scraperId]
                         val enabled = when {
                             !info.enabled -> false
@@ -533,7 +570,8 @@ actual object PluginRepository {
             state = _uiState.value,
         )
         val requiresCodeWrite = snapshot.state.scrapers.any { scraper ->
-            !PluginStorage.hasScraperCode(snapshot.profileId, scraper.id)
+            val isCs = scraper.filename.endsWith(".cs3") || scraper.repositoryUrl.contains(".json")
+            !isCs && !PluginStorage.hasScraperCode(snapshot.profileId, scraper.id)
         }
         if (requiresCodeWrite) {
             scope.launch { persist(snapshot) }
@@ -546,13 +584,16 @@ actual object PluginRepository {
         if (snapshot.generation != persistenceGeneration.value) return
         var cached = true
         snapshot.state.scrapers.forEach { scraper ->
-            val scraperCached = PluginStorage.saveScraperCode(
-                profileId = snapshot.profileId,
-                scraperId = scraper.id,
-                code = scraper.code,
-                overwrite = false,
-            )
-            cached = scraperCached && cached
+            val isCs = scraper.filename.endsWith(".cs3") || scraper.repositoryUrl.contains(".json")
+            if (!isCs) {
+                val scraperCached = PluginStorage.saveScraperCode(
+                    profileId = snapshot.profileId,
+                    scraperId = scraper.id,
+                    code = scraper.code,
+                    overwrite = false,
+                )
+                cached = scraperCached && cached
+            }
         }
         if (!cached || snapshot.generation != persistenceGeneration.value) {
             if (!cached) {
@@ -638,15 +679,22 @@ actual object PluginRepository {
         urls.map(::ensureManifestSuffix).distinct()
 
     private fun ensureManifestSuffix(url: String): String {
+        if (CloudstreamRepositoryResolver.isCloudstreamRepositoryUrl(url)) {
+            return url.trim()
+        }
         val path = url.substringBefore("?").trimEnd('/')
         val query = url.substringAfter("?", "")
         val withSuffix = if (path.endsWith("/manifest.json")) path else "$path/manifest.json"
         return if (query.isEmpty()) withSuffix else "$withSuffix?$query"
     }
 
-    private fun normalizeManifestUrl(rawUrl: String): String {
+    private suspend fun normalizeManifestUrl(rawUrl: String): String {
         val trimmed = rawUrl.trim()
         require(trimmed.isNotEmpty()) { runBlocking { getString(Res.string.plugins_error_enter_repo_url) } }
+
+        if (CloudstreamRepositoryResolver.isCloudstreamRepositoryUrl(trimmed)) {
+            return CloudstreamRepositoryResolver.resolveRepositoryUrl(trimmed)
+        }
 
         val normalizedScheme = when {
             trimmed.startsWith("http://") || trimmed.startsWith("https://") -> trimmed
