@@ -95,14 +95,15 @@ object ThemeColors {
     )
 
     val Crimson = ThemeColorPalette(
-        secondary = Color(0xFFE53935),
-        secondaryVariant = Color(0xFFC62828),
-        nativeAccentHex = "#E53935",
-        focusRing = Color(0xFFFF5252),
-        focusBackground = Color(0xFF3D1A1A),
-        background = Color(0xFF0D0D0D),
-        backgroundElevated = Color(0xFF1A1A1A),
-        backgroundCard = Color(0xFF241A1A),
+        secondary = Color(0xFFE50914),
+        secondaryVariant = Color(0xFFB81D24),
+        accentGradient = listOf(Color(0xFFE50914), Color(0xFFB81D24)),
+        nativeAccentHex = "#E50914",
+        focusRing = Color(0xFFE50914),
+        focusBackground = Color(0xFF2B090B),
+        background = Color(0xFF121212),
+        backgroundElevated = Color(0xFF181818),
+        backgroundCard = Color(0xFF222222),
     )
 
     val Ocean = ThemeColorPalette(

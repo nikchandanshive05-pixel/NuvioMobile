@@ -2,54 +2,72 @@
 
   <img src="https://nuvio.tv/assets/nuvio-app-logo-wordmark.webp" alt="Nuvio" width="320" />
 
+  <h1>Nuvio + Cloudstream Unified</h1>
   <p>
-    A free, open-source media app for your phone, your desktop, and the TV you already own.
+    <b>The Ultimate Open-Source Android Streaming App</b>
     <br />
-    Bring your own sources. Nuvio turns them into a library with artwork, ratings, subtitles, and your place saved on every screen.
+    Combining <b>Cloudstream's</b> battle-tested multi-host scraping and link extractors with <b>NuvioMobile's</b> modern Compose Multiplatform reactive UI, Stremio/Debrid engine, and centralized metadata.
   </p>
 
-  [Website](https://nuvio.tv) · [GitHub releases](https://github.com/NuvioMedia/NuvioMobile/releases/latest) · [Support Nuvio](https://nuvio.tv/support)
+  <p>
+    <a href="https://github.com/nikchandanshive05-pixel/NuvioMobile/releases"><b>Download Latest APK</b></a> ·
+    <a href="#visual-interface"><b>UI Showcase</b></a> ·
+    <a href="#dual-engine-architecture"><b>Architecture</b></a>
+  </p>
 
 </div>
 
-## Get Nuvio Mobile
+---
 
-- [Android on Google Play](https://play.google.com/store/apps/details?id=com.nuvio.app)
-- [Android APK](https://github.com/NuvioMedia/NuvioMobile/releases/latest)
-- iOS via AltStore or SideStore: add [this source URL](https://raw.githubusercontent.com/NuvioMedia/NuvioMobile/cmp-rewrite/store.json) in the app's Sources section, then install Nuvio.
+## 📱 Visual Interface (Netflix Dark Aesthetic)
 
-## Build from source
+Designed with Jetpack Compose for Android with a fluid 120Hz refresh rate, deep OLED charcoal `#121212` backgrounds, and official Netflix crimson `#E50914` accents.
+
+| Home Feed | Media Details & Streams | 4K HDR Landscape Player |
+| :---: | :---: | :---: |
+| <img src="./assets/mockups/home_screen_mockup.jpg" width="260" alt="Home Screen" /> | <img src="./assets/mockups/details_screen_mockup.jpg" width="260" alt="Details & Stream Selector" /> | <img src="./assets/mockups/player_screen_mockup.jpg" width="380" alt="Player Screen" /> |
+
+---
+
+## ⚡ Core Highlights
+
+### 1. Dual-Engine Stream Aggregator
+* **Cloudstream Native Extractors**: Built-in direct video host resolvers for **StreamTape**, **FileMoon**, **Mixdrop**, **DoodStream**, **Vidplay**, and 100+ others. No remote servers or subscriptions required.
+* **Stremio & Debrid Protocol**: Direct support for Stremio community add-ons, HTTP manifests, and cached high-bitrate torrent streams via **Real-Debrid**, **AllDebrid**, and **TorBox**.
+
+### 2. Best-in-Class Playback Engine
+* **AndroidX Media3 (ExoPlayer)** with low-latency buffering, hardware decoder passthrough, and custom connection pooling.
+* **MPV Native Lib** (`mpv-android-lib`) for complex MKV containers and stylized anime ASS/SSA subtitles.
+* **Smart Player Gestures**: Vertical brightness swipe (left), volume swipe (right), double-tap seek (`±10s`), and auto-skip intro.
+
+### 3. Unified Catalog & Tracker Sync
+* Full metadata aggregation via **TheMovieDatabase (TMDB)** and **Cinemeta**.
+* Two-way scrobbling and watch progress synchronization with **Trakt**, **Simkl**, and **AniList**.
+
+---
+
+## 🛠️ Building & Automated Releases
+
+### GitHub Actions (Instant APK Generation)
+This repository includes automated CI/CD workflows under `.github/workflows/build-apk.yml`. 
+* Pushing to `build-pipeline` or triggering the **Build Unified Android APK** workflow automatically builds the universal debug APK and creates a downloadable release on GitHub.
+
+### Local Build (Android)
+Requires JDK 17+ and the Android SDK:
 
 ```bash
-git clone https://github.com/NuvioMedia/NuvioMobile.git
-cd NuvioMobile
+./gradlew :androidApp:assembleFullDebug -Pnuvio.android.distribution=full -Pnuvio.ios.distribution=appstore
 ```
 
-### Android
-
-Android development requires Android Studio and the Android SDK.
-
-```bash
-./gradlew :androidApp:assembleFullDebug
+The compiled APK will be generated at:
+```
+androidApp/build/outputs/apk/full/debug/
 ```
 
-### iOS
+---
 
-iOS development requires macOS and Xcode.
+## 📜 License & Credits
 
-```bash
-env NUVIO_IOS_DISTRIBUTION=full xcodebuild \
-  -project iosApp/iosApp.xcodeproj \
-  -scheme iosApp \
-  -configuration Debug \
-  -sdk iphonesimulator \
-  -derivedDataPath build/ios-derived-full-simulator \
-  CODE_SIGNING_ALLOWED=NO \
-  build
-```
-
-The shared app is built with Kotlin Multiplatform and Compose Multiplatform.
-
-## License
-
-[GNU General Public License v3.0](./LICENSE)
+* Core frontend & CMP architecture by [NuvioMedia / tapframe](https://github.com/tapframe/NuvioMobile).
+* Direct scrapers, link extractors, and resolvers derived from [recloudstream/cloudstream](https://github.com/recloudstream/cloudstream).
+* Licensed under the [GNU General Public License v3.0](./LICENSE).
