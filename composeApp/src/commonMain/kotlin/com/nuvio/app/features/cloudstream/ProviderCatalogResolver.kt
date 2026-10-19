@@ -54,6 +54,12 @@ object ProviderCatalogResolver {
             watchProviderId = "122|337",
             networkId = 2739,
         ),
+        "cnc_adult" to ProviderCatalogConfig(
+            id = "cnc_adult",
+            displayName = "18+ Adult Content",
+            watchProviderId = "",
+            networkId = null,
+        ),
     )
 
     // In-memory cache for ultra-fast, lag-free switching between providers
@@ -69,6 +75,8 @@ object ProviderCatalogResolver {
         val apiKey = TmdbSettingsRepository.effectiveApiKey()
         val language = normalizeTmdbLanguage(TmdbSettingsRepository.snapshot().language)
 
+        val isAdultProvider = providerId == "cnc_adult"
+
         coroutineScope {
             val trendingMoviesDeferred = async {
                 fetchDiscover(
@@ -78,6 +86,8 @@ object ProviderCatalogResolver {
                     watchProviderId = config.watchProviderId,
                     sortBy = "popularity.desc",
                     mediaType = "movie",
+                    includeAdult = isAdultProvider,
+                    withKeywords = if (isAdultProvider) "190370|190371|2611|155477|9826" else null, // Erotic / Adult keywords
                 )
             }
             val trendingTvDeferred = async {
@@ -89,6 +99,8 @@ object ProviderCatalogResolver {
                     sortBy = "popularity.desc",
                     mediaType = "series",
                     networkId = config.networkId,
+                    includeAdult = isAdultProvider,
+                    withKeywords = if (isAdultProvider) "190370|190371|2611|155477|9826" else null,
                 )
             }
             val topRatedMoviesDeferred = async {
@@ -98,8 +110,10 @@ object ProviderCatalogResolver {
                     language = language,
                     watchProviderId = config.watchProviderId,
                     sortBy = "vote_average.desc",
-                    voteCountGte = 200,
+                    voteCountGte = if (isAdultProvider) 50 else 200,
                     mediaType = "movie",
+                    includeAdult = isAdultProvider,
+                    withKeywords = if (isAdultProvider) "190370|190371|2611|155477|9826" else null,
                 )
             }
 
@@ -267,11 +281,14 @@ object ProviderCatalogResolver {
         sortBy: String = "popularity.desc",
         voteCountGte: Int? = null,
         mediaType: String,
+        includeAdult: Boolean = false,
+        withKeywords: String? = null,
     ): List<MetaPreview> {
         val query = mutableMapOf(
             "language" to language,
             "sort_by" to sortBy,
             "page" to "1",
+            "include_adult" to includeAdult.toString(),
         )
         if (!watchProviderId.isNullOrBlank()) {
             query["with_watch_providers"] = watchProviderId
@@ -282,6 +299,9 @@ object ProviderCatalogResolver {
         }
         if (voteCountGte != null && voteCountGte > 0) {
             query["vote_count.gte"] = voteCountGte.toString()
+        }
+        if (!withKeywords.isNullOrBlank()) {
+            query["with_keywords"] = withKeywords
         }
 
         val url = buildTmdbUrl(endpoint = endpoint, apiKey = apiKey, query = query)

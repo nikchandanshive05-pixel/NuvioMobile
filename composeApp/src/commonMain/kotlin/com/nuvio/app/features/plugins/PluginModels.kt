@@ -101,6 +101,8 @@ data class PluginsUiState(
     val pluginsEnabled: Boolean = true,
     val cloudstreamModeEnabled: Boolean = true,
     val groupStreamsByRepository: Boolean = false,
+    val nsfwEnabled: Boolean = false,
+    val enabledProviderIds: Set<String> = setOf("unified", "cnc_netflix", "cnc_prime", "cnc_hotstar"),
     val repositories: List<PluginRepositoryItem> = emptyList(),
     val scrapers: List<PluginScraper> = emptyList(),
 )
@@ -115,6 +117,8 @@ internal data class StoredPluginsState(
     val pluginsEnabled: Boolean = true,
     val cloudstreamModeEnabled: Boolean = true,
     val groupStreamsByRepository: Boolean = false,
+    val nsfwEnabled: Boolean = false,
+    val enabledProviderIds: List<String> = listOf("unified", "cnc_netflix", "cnc_prime", "cnc_hotstar"),
     val repositories: List<StoredPluginRepository> = emptyList(),
     val scrapers: List<StoredPluginScraper> = emptyList(),
 )
@@ -157,6 +161,8 @@ internal fun PluginsUiState.toStoredPluginsState(): StoredPluginsState =
         pluginsEnabled = pluginsEnabled,
         cloudstreamModeEnabled = cloudstreamModeEnabled,
         groupStreamsByRepository = groupStreamsByRepository,
+        nsfwEnabled = nsfwEnabled,
+        enabledProviderIds = enabledProviderIds.toList(),
         repositories = repositories.map { repository ->
             StoredPluginRepository(
                 manifestUrl = repository.manifestUrl,

@@ -13,12 +13,14 @@ import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Extension
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -98,6 +100,44 @@ fun PluginsSettingsPageContent(
 
     var configuringScraper by remember { mutableStateOf<PluginScraper?>(null) }
     var configuringLayout by remember { mutableStateOf<String?>(null) }
+
+    var showNsfwWarningDialog by remember { mutableStateOf(false) }
+
+    if (showNsfwWarningDialog) {
+        AlertDialog(
+            onDismissRequest = { showNsfwWarningDialog = false },
+            title = {
+                Text(
+                    text = "Adult Content Warning (18+)",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            },
+            text = {
+                Text(
+                    text = "You are about to enable 18+ and NSFW providers and catalogs. This content is intended strictly for adults. Please confirm you are 18 years of age or older.",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        PluginRepository.setNsfwEnabled(true)
+                        showNsfwWarningDialog = false
+                    }
+                ) {
+                    Text("I am 18 or older", color = MaterialTheme.colorScheme.primary)
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showNsfwWarningDialog = false }
+                ) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
 
     val sortedRepos = remember(uiState.repositories) {
         uiState.repositories.sortedBy { it.name.lowercase() }
@@ -221,6 +261,146 @@ fun PluginsSettingsPageContent(
                 Switch(
                     checked = uiState.groupStreamsByRepository,
                     onCheckedChange = { PluginRepository.setGroupStreamsByRepository(it) },
+                )
+            }
+        }
+
+        // =====================================================================
+        // STREAMING PROVIDERS & CONTENT FILTERS
+        // =====================================================================
+        NuvioSectionLabel("Streaming Providers & Content Filters")
+        NuvioSurfaceCard {
+            Text(
+                text = "Choose which streaming providers appear in the Home Screen drop-down menu.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // Netflix
+            val netflixEnabled = "cnc_netflix" in uiState.enabledProviderIds
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "CNC Verse - Netflix",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        text = "Show Netflix catalog in Home drop-down selector",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(
+                    checked = netflixEnabled,
+                    onCheckedChange = { PluginRepository.toggleProviderEnabled("cnc_netflix", it) },
+                )
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Prime Video
+            val primeEnabled = "cnc_prime" in uiState.enabledProviderIds
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "CNC Verse - Prime Video",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        text = "Show Amazon Prime Video catalog in Home drop-down selector",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(
+                    checked = primeEnabled,
+                    onCheckedChange = { PluginRepository.toggleProviderEnabled("cnc_prime", it) },
+                )
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // HotStar
+            val hotstarEnabled = "cnc_hotstar" in uiState.enabledProviderIds
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "CNC Verse - HotStar",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        text = "Show Disney+ HotStar catalog in Home drop-down selector",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(
+                    checked = hotstarEnabled,
+                    onCheckedChange = { PluginRepository.toggleProviderEnabled("cnc_hotstar", it) },
+                )
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // Master NSFW / Adult Content Filter
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "Enable 18+ / NSFW Content",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = if (uiState.nsfwEnabled) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        NuvioInfoBadge(
+                            text = if (uiState.nsfwEnabled) "18+ ACTIVE" else "OFF",
+                            containerColor = if (uiState.nsfwEnabled) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surfaceVariant,
+                            contentColor = if (uiState.nsfwEnabled) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "Add 'CNC Verse - 18+ Adult' to the Home drop-down and enable adult metadata feeds.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Switch(
+                    checked = uiState.nsfwEnabled,
+                    onCheckedChange = { willEnable ->
+                        if (willEnable) {
+                            showNsfwWarningDialog = true
+                        } else {
+                            PluginRepository.setNsfwEnabled(false)
+                        }
+                    },
                 )
             }
         }

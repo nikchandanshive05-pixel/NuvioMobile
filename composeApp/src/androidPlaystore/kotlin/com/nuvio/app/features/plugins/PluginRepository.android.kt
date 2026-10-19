@@ -34,6 +34,10 @@ actual object PluginRepository {
     actual fun setPluginsEnabled(enabled: Boolean) = Unit
 
     actual fun setCloudstreamModeEnabled(enabled: Boolean) = Unit
+ 
+    actual fun setNsfwEnabled(enabled: Boolean) = Unit
+
+    actual fun toggleProviderEnabled(providerId: String, enabled: Boolean) = Unit
 
     actual fun setGroupStreamsByRepository(enabled: Boolean) = Unit
 

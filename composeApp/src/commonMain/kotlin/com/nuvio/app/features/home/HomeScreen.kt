@@ -892,7 +892,17 @@ fun HomeScreen(
     }
 
     // Dynamic Provider Catalog and Fallback Loader
-    LaunchedEffect(selectedProviderId, hasActiveAddons, hasServerLibraries) {
+    LaunchedEffect(selectedProviderId, hasActiveAddons, hasServerLibraries, pluginsUiState.enabledProviderIds, pluginsUiState.nsfwEnabled) {
+        val isProviderAvailable = when (selectedProviderId) {
+            "unified" -> true
+            "cnc_adult" -> pluginsUiState.nsfwEnabled
+            else -> selectedProviderId in pluginsUiState.enabledProviderIds
+        }
+        if (!isProviderAvailable) {
+            selectedProviderId = "unified"
+            return@LaunchedEffect
+        }
+
         if (selectedProviderId != "unified") {
             isProviderCatalogLoading = true
             providerCatalogResult = runCatching {
@@ -1074,6 +1084,8 @@ fun HomeScreen(
                         HomeProviderSelectorPill(
                             currentProviderId = selectedProviderId,
                             onProviderSelected = { selectedProviderId = it },
+                            enabledProviderIds = pluginsUiState.enabledProviderIds,
+                            nsfwEnabled = pluginsUiState.nsfwEnabled,
                         )
                     }
                 }

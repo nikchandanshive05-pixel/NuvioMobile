@@ -27,6 +27,10 @@ expect object PluginRepository {
 
     fun setCloudstreamModeEnabled(enabled: Boolean)
 
+    fun setNsfwEnabled(enabled: Boolean)
+
+    fun toggleProviderEnabled(providerId: String, enabled: Boolean)
+
     fun setGroupStreamsByRepository(enabled: Boolean)
 
     fun setLocalPluginSearchPaused(paused: Boolean)

@@ -46,6 +46,13 @@ data class CloudStreamProviderChoice(
     val icon: ImageVector,
 )
 
+val adultCloudstreamProvider = CloudStreamProviderChoice(
+    id = "cnc_adult",
+    name = "CNC Verse - 18+ Adult",
+    subtitle = "Adult Releases & Erotic Thrillers",
+    icon = Icons.Default.PlayArrow,
+)
+
 val defaultCloudstreamProviders = listOf(
     CloudStreamProviderChoice(
         id = "unified",
@@ -78,11 +85,26 @@ val defaultCloudstreamProviders = listOf(
 fun HomeProviderSelectorPill(
     currentProviderId: String,
     onProviderSelected: (String) -> Unit,
+    enabledProviderIds: Set<String> = setOf("unified", "cnc_netflix", "cnc_prime", "cnc_hotstar"),
+    nsfwEnabled: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     var showSheet by remember { mutableStateOf(false) }
-    val activeChoice = remember(currentProviderId) {
-        defaultCloudstreamProviders.find { it.id == currentProviderId } ?: defaultCloudstreamProviders.first()
+
+    val availableProviders = remember(enabledProviderIds, nsfwEnabled) {
+        val base = defaultCloudstreamProviders.filter { it.id in enabledProviderIds || it.id == "unified" }
+        if (nsfwEnabled) {
+            base + adultCloudstreamProvider
+        } else {
+            base
+        }
+    }
+
+    val activeChoice = remember(currentProviderId, availableProviders) {
+        availableProviders.find { it.id == currentProviderId }
+            ?: defaultCloudstreamProviders.find { it.id == currentProviderId }
+            ?: availableProviders.firstOrNull()
+            ?: defaultCloudstreamProviders.first()
     }
 
     Surface(
@@ -144,7 +166,7 @@ fun HomeProviderSelectorPill(
                     modifier = Modifier.padding(bottom = 16.dp, top = 4.dp),
                 )
 
-                defaultCloudstreamProviders.forEach { provider ->
+                availableProviders.forEach { provider ->
                     val isSelected = provider.id == currentProviderId
                     Row(
                         modifier = Modifier

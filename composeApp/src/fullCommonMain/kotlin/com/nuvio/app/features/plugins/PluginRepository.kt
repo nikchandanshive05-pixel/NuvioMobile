@@ -320,6 +320,25 @@ actual object PluginRepository {
         persist()
     }
 
+    actual fun setNsfwEnabled(enabled: Boolean) {
+        initialize()
+        _uiState.update { it.copy(nsfwEnabled = enabled) }
+        persist()
+    }
+
+    actual fun toggleProviderEnabled(providerId: String, enabled: Boolean) {
+        initialize()
+        _uiState.update { state ->
+            val updated = if (enabled) {
+                state.enabledProviderIds + providerId
+            } else {
+                state.enabledProviderIds - providerId
+            }
+            state.copy(enabledProviderIds = updated)
+        }
+        persist()
+    }
+
     actual fun setGroupStreamsByRepository(enabled: Boolean) {
         initialize()
         _uiState.update { it.copy(groupStreamsByRepository = enabled) }
@@ -660,7 +679,10 @@ actual object PluginRepository {
         return LoadedPluginState(
             state = PluginsUiState(
                 pluginsEnabled = stored?.pluginsEnabled ?: true,
+                cloudstreamModeEnabled = stored?.cloudstreamModeEnabled ?: true,
                 groupStreamsByRepository = stored?.groupStreamsByRepository ?: false,
+                nsfwEnabled = stored?.nsfwEnabled ?: false,
+                enabledProviderIds = stored?.enabledProviderIds?.toSet() ?: setOf("unified", "cnc_netflix", "cnc_prime", "cnc_hotstar"),
                 repositories = stored?.repositories
                     ?.map {
                         PluginRepositoryItem(
