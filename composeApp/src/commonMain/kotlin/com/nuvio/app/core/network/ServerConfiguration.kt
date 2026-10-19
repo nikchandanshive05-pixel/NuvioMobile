@@ -49,9 +49,13 @@ object ServerConfigurationRepository {
     }
 }
 
+private const val OFFICIAL_DEFAULT_BACKEND_URL = "https://api.nuvio.tv"
+private const val OFFICIAL_DEFAULT_ANON_KEY =
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzgxNTIxMzQ2LCJleHAiOjE5MzkyMDEzNDZ9.tmQaj682pwzehpqlgCDMnySOqiUvpgRbrE43T4VJpDI"
+
 internal fun officialConfiguration() = ServerConfiguration(
-    backendUrl = SupabaseConfig.URL.trim().trimEnd('/'),
-    publishableKey = SupabaseConfig.ANON_KEY.trim(),
+    backendUrl = SupabaseConfig.URL.trim().trimEnd('/').ifBlank { OFFICIAL_DEFAULT_BACKEND_URL },
+    publishableKey = SupabaseConfig.ANON_KEY.trim().ifBlank { OFFICIAL_DEFAULT_ANON_KEY },
     capabilities = ServerCapabilities(
         emailPasswordAuth = true,
         tvLogin = true,
