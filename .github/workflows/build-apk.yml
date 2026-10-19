@@ -42,7 +42,17 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build Full Android APK
-        run: ./gradlew :androidApp:assembleFullDebug -Pnuvio.android.distribution=full -Pnuvio.ios.distribution=appstore --stacktrace
+        run: |
+          ./gradlew :androidApp:assembleFullDebug -Pnuvio.android.distribution=full -Pnuvio.ios.distribution=appstore --stacktrace
+
+      - name: Upload Build Log on Failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-failure-diagnostic
+          path: |
+            **/build/reports/**
+          retention-days: 7
 
       - name: Upload Debug APK Artifact
         uses: actions/upload-artifact@v4

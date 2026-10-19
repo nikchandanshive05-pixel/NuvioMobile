@@ -215,19 +215,34 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
             enter = fadeIn(animationSpec = tween(durationMillis = 220)),
             exit = fadeOut(animationSpec = tween(durationMillis = 180)),
         ) {
-            PauseMetadataOverlay(
-                title = title,
-                logo = logo,
-                isEpisode = isEpisode,
-                seasonNumber = activeSeasonNumber,
-                episodeNumber = activeEpisodeNumber,
-                episodeTitle = activeEpisodeTitle,
-                pauseDescription = activePauseDescription ?: activeStreamSubtitle,
-                providerName = activeProviderName,
-                metrics = metrics,
-                horizontalSafePadding = horizontalSafePadding,
-                modifier = Modifier.fillMaxSize(),
-            )
+            val castList = metaUiState.meta?.cast.orEmpty()
+            val genreList = metaUiState.meta?.genres.orEmpty()
+            if (castList.isNotEmpty()) {
+                com.nuvio.app.features.player.components.XRayPauseSheet(
+                    title = title,
+                    episodeTitle = activeEpisodeTitle,
+                    seasonNumber = activeSeasonNumber,
+                    episodeNumber = activeEpisodeNumber,
+                    cast = castList,
+                    genres = genreList,
+                    horizontalSafePadding = horizontalSafePadding,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            } else {
+                PauseMetadataOverlay(
+                    title = title,
+                    logo = logo,
+                    isEpisode = isEpisode,
+                    seasonNumber = activeSeasonNumber,
+                    episodeNumber = activeEpisodeNumber,
+                    episodeTitle = activeEpisodeTitle,
+                    pauseDescription = activePauseDescription ?: activeStreamSubtitle,
+                    providerName = activeProviderName,
+                    metrics = metrics,
+                    horizontalSafePadding = horizontalSafePadding,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
         }
 
         RenderPlayerControls(displayedPositionMs = displayedPositionMs, isEpisode = isEpisode)
