@@ -43,6 +43,8 @@ import com.nuvio.app.features.servers.ServerRepository
 import com.nuvio.app.features.addons.firstEnabledManifestError
 import com.nuvio.app.features.cloud.CloudLibraryContentType
 import com.nuvio.app.features.cloud.CloudLibraryRepository
+import com.nuvio.app.features.cloudstream.ProviderCatalogResolver
+import com.nuvio.app.features.cloudstream.ProviderCatalogResult
 import com.nuvio.app.features.cloud.CloudLibraryUiState
 import com.nuvio.app.features.cloud.findPlaybackTargetForProgress
 import com.nuvio.app.features.details.MetaDetails
@@ -146,6 +148,8 @@ fun HomeScreen(
     val addonsUiState by AddonRepository.uiState.collectAsStateWithLifecycle()
     val pluginsUiState by PluginRepository.uiState.collectAsStateWithLifecycle()
     var selectedProviderId by remember { mutableStateOf("unified") }
+    var providerCatalogResult by remember { mutableStateOf<ProviderCatalogResult?>(null) }
+    var isProviderCatalogLoading by remember { mutableStateOf(false) }
     val homeUiState by HomeRepository.uiState.collectAsStateWithLifecycle()
     val homeSettingsUiState by remember {
         HomeCatalogSettingsRepository.snapshot()
@@ -887,14 +891,42 @@ fun HomeScreen(
         onFirstCatalogRendered?.invoke()
     }
 
+    // Dynamic Provider Catalog and Fallback Loader
+    LaunchedEffect(selectedProviderId, hasActiveAddons, hasServerLibraries) {
+        if (selectedProviderId != "unified") {
+            isProviderCatalogLoading = true
+            providerCatalogResult = runCatching {
+                ProviderCatalogResolver.resolveProviderCatalog(selectedProviderId)
+            }.getOrNull()
+            isProviderCatalogLoading = false
+        } else if (!hasActiveAddons && !hasServerLibraries) {
+            // Automatic fallback to CloudStream / Trending feeds when no Stremio addons are enabled
+            isProviderCatalogLoading = true
+            providerCatalogResult = runCatching {
+                ProviderCatalogResolver.resolveFallbackCatalog()
+            }.getOrNull()
+            isProviderCatalogLoading = false
+        } else {
+            providerCatalogResult = null
+            isProviderCatalogLoading = false
+        }
+    }
+
+    val activeHeroItems = remember(providerCatalogResult, homeUiState.heroItems) {
+        providerCatalogResult?.heroItems ?: homeUiState.heroItems
+    }
+    val activeSections = remember(providerCatalogResult, homeUiState.sections) {
+        providerCatalogResult?.sections ?: homeUiState.sections
+    }
+
     val visibleCollections = remember(collections) {
         collections.filter { it.folders.isNotEmpty() }
     }
     val collectionsMap = remember(visibleCollections) {
         visibleCollections.associateBy { "collection_${it.id}" }
     }
-    val sectionsMap = remember(homeUiState.sections) {
-        homeUiState.sections.associateBy(HomeCatalogSection::key)
+    val sectionsMap = remember(activeSections) {
+        activeSections.associateBy(HomeCatalogSection::key)
     }
     val enabledHomeItems = remember(homeSettingsUiState.items) {
         homeSettingsUiState.items.filter { it.enabled }
@@ -929,11 +961,11 @@ fun HomeScreen(
             item.isCollection && collectionsMap[item.key] != null
         }
     }
-    val hasRenderableHomeRows = homeUiState.sections.isNotEmpty() || hasRenderableCollectionRows
+    val hasRenderableHomeRows = activeSections.isNotEmpty() || hasRenderableCollectionRows
     val showHeroSlot = shouldShowHomeHeroSlot(
         heroEnabled = homeSettingsUiState.heroEnabled,
-        hasHeroItems = homeUiState.heroItems.isNotEmpty(),
-        isResolvingHeroSources = isResolvingHeroSources,
+        hasHeroItems = activeHeroItems.isNotEmpty(),
+        isResolvingHeroSources = isResolvingHeroSources || isProviderCatalogLoading,
         hasRenderableHomeRows = hasRenderableHomeRows,
     )
     MaintainHomeScrollPosition(
@@ -942,12 +974,12 @@ fun HomeScreen(
         showHeroSlot = showHeroSlot,
     )
     val showHeroSkeleton = showHeroSlot &&
-        homeUiState.heroItems.isEmpty() &&
-        isResolvingHeroSources
+        activeHeroItems.isEmpty() &&
+        (isResolvingHeroSources || isProviderCatalogLoading)
     val isInitialHomeContentLoading = shouldShowInitialHomeLoading(
         hasRenderableHomeRows = hasRenderableHomeRows,
         addonManifestsLoading = addonManifestsLoading,
-        homeCatalogLoading = homeUiState.isLoading,
+        homeCatalogLoading = homeUiState.isLoading || isProviderCatalogLoading,
     )
 
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
@@ -1011,8 +1043,8 @@ fun HomeScreen(
                                 mobileBelowSectionHeightHint = mobileHeroBelowSectionHeightHint,
                             )
 
-                            homeUiState.heroItems.isNotEmpty() -> HomeHeroSection(
-                                items = homeUiState.heroItems,
+                            activeHeroItems.isNotEmpty() -> HomeHeroSection(
+                                items = activeHeroItems,
                                 modifier = Modifier,
                                 viewportHeight = maxHeight,
                                 mobileBelowSectionHeightHint = mobileHeroBelowSectionHeightHint,
@@ -1073,7 +1105,7 @@ fun HomeScreen(
                     }
                 }
 
-                !hasActiveAddons && !hasServerLibraries && !hasRenderableCollectionRows -> {
+                !hasActiveAddons && !hasServerLibraries && !hasRenderableCollectionRows && activeSections.isEmpty() -> {
                     homeContinueWatchingSections(
                         preferences = continueWatchingPreferences,
                         continueWatchingItems = continueWatchingItems,
@@ -1124,7 +1156,7 @@ fun HomeScreen(
                     }
                 }
 
-                homeUiState.sections.isEmpty() && homeUiState.heroItems.isEmpty() &&
+                activeSections.isEmpty() && activeHeroItems.isEmpty() &&
                     (!continueWatchingPreferences.isVisible || !hasContinueWatchingRows) &&
                     !hasRenderableCollectionRows -> {
                     item(key = "home_empty", contentType = "empty") {
@@ -1179,25 +1211,10 @@ fun HomeScreen(
                         disintegrationRequest = continueWatchingDisintegrationRequest,
                     )
 
-                    keyedEnabledHomeItems.forEach { keyedSettingsItem ->
-                        val settingsItem = keyedSettingsItem.value
-                        if (settingsItem.isCollection) {
-                            val collection = collectionsMap[settingsItem.key]
-                            if (collection != null) {
-                                item(key = keyedSettingsItem.lazyKey, contentType = "collection") {
-                                    HomeCollectionRowSection(
-                                        collection = collection,
-                                        modifier = Modifier.padding(bottom = 12.dp),
-                                        sectionPadding = homeSectionPadding,
-                                        animateGifs = animateCollectionGifs,
-                                        onFolderClick = onFolderClick,
-                                    )
-                                }
-                            }
-                        } else {
-                            val section = sectionsMap[settingsItem.key]
-                            if (section != null && section.items.isNotEmpty()) {
-                                item(key = keyedSettingsItem.lazyKey, contentType = "catalog") {
+                    if (providerCatalogResult != null) {
+                        activeSections.forEach { section ->
+                            if (section.items.isNotEmpty()) {
+                                item(key = "provider_section_${section.key}", contentType = "catalog") {
                                     HomeCatalogRowSection(
                                         section = section,
                                         entries = section.items.take(HOME_CATALOG_PREVIEW_LIMIT),
@@ -1213,6 +1230,45 @@ fun HomeScreen(
                                         onPosterClick = onPosterClick,
                                         onPosterLongClick = onPosterLongClick,
                                     )
+                                }
+                            }
+                        }
+                    } else {
+                        keyedEnabledHomeItems.forEach { keyedSettingsItem ->
+                            val settingsItem = keyedSettingsItem.value
+                            if (settingsItem.isCollection) {
+                                val collection = collectionsMap[settingsItem.key]
+                                if (collection != null) {
+                                    item(key = keyedSettingsItem.lazyKey, contentType = "collection") {
+                                        HomeCollectionRowSection(
+                                            collection = collection,
+                                            modifier = Modifier.padding(bottom = 12.dp),
+                                            sectionPadding = homeSectionPadding,
+                                            animateGifs = animateCollectionGifs,
+                                            onFolderClick = onFolderClick,
+                                        )
+                                    }
+                                }
+                            } else {
+                                val section = sectionsMap[settingsItem.key]
+                                if (section != null && section.items.isNotEmpty()) {
+                                    item(key = keyedSettingsItem.lazyKey, contentType = "catalog") {
+                                        HomeCatalogRowSection(
+                                            section = section,
+                                            entries = section.items.take(HOME_CATALOG_PREVIEW_LIMIT),
+                                            modifier = Modifier.padding(bottom = 12.dp),
+                                            sectionPadding = homeSectionPadding,
+                                            onViewAllClick = if (section.canOpenCatalog(HOME_CATALOG_PREVIEW_LIMIT)) {
+                                                onCatalogClick?.let { { it(section) } }
+                                            } else {
+                                                null
+                                            },
+                                            watchedKeys = watchedUiState.watchedKeys,
+                                            fullyWatchedSeriesKeys = fullyWatchedSeriesKeys,
+                                            onPosterClick = onPosterClick,
+                                            onPosterLongClick = onPosterLongClick,
+                                        )
+                                    }
                                 }
                             }
                         }
