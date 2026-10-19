@@ -17,6 +17,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.Dp
@@ -95,6 +96,8 @@ import com.nuvio.app.features.watching.domain.isReleasedBy
 import com.nuvio.app.features.collection.CollectionRepository
 import com.nuvio.app.features.profiles.ProfileRepository
 import com.nuvio.app.features.home.components.HomeCollectionRowSection
+import com.nuvio.app.features.home.components.HomeProviderSelectorPill
+import com.nuvio.app.features.plugins.PluginRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
@@ -139,6 +142,8 @@ fun HomeScreen(
     }
 
     val addonsUiState by AddonRepository.uiState.collectAsStateWithLifecycle()
+    val pluginsUiState by PluginRepository.uiState.collectAsStateWithLifecycle()
+    var selectedProviderId by remember { mutableStateOf("unified") }
     val homeUiState by HomeRepository.uiState.collectAsStateWithLifecycle()
     val homeSettingsUiState by remember {
         HomeCatalogSettingsRepository.snapshot()
@@ -1020,6 +1025,22 @@ fun HomeScreen(
                                 mobileBelowSectionHeightHint = mobileHeroBelowSectionHeightHint,
                             )
                         }
+                    }
+                }
+            }
+
+            if (pluginsUiState.cloudstreamModeEnabled) {
+                item(key = "home_cloudstream_provider_selector") {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = homeSectionPadding, vertical = 8.dp),
+                        contentAlignment = Alignment.CenterStart,
+                    ) {
+                        HomeProviderSelectorPill(
+                            currentProviderId = selectedProviderId,
+                            onProviderSelected = { selectedProviderId = it },
+                        )
                     }
                 }
             }

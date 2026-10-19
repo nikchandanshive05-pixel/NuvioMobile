@@ -17,7 +17,13 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.BookmarkBorder
+import androidx.compose.material.icons.filled.Cast
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.NotificationsNone
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -178,7 +184,7 @@ private fun DetailFloatingHeaderAction(
         contentAlignment = Alignment.Center,
     ) {
         Icon(
-            imageVector = if (isSaved) Icons.Default.Check else Icons.Default.Add,
+            imageVector = if (isSaved) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
             contentDescription = if (isSaved) {
                 stringResource(Res.string.hero_remove_from_library)
             } else {

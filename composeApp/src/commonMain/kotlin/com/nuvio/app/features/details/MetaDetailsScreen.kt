@@ -32,12 +32,18 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.BookmarkBorder
+import androidx.compose.material.icons.filled.Cast
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CheckCircleOutline
 import androidx.compose.material.icons.filled.DoneAll
+import androidx.compose.material.icons.filled.NotificationsNone
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PlaylistAddCheckCircle
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -111,6 +117,8 @@ import com.nuvio.app.features.details.components.SeasonWatchedActionSheet
 import com.nuvio.app.features.details.components.TabletDetailBackdrop
 import com.nuvio.app.features.details.components.TabletDetailHero
 import com.nuvio.app.features.details.components.TrailerPlayerPopup
+import com.nuvio.app.features.details.components.WatchStatus
+import com.nuvio.app.features.details.components.WatchStatusBottomSheet
 import com.nuvio.app.features.home.MetaPreview
 import com.nuvio.app.features.mdblist.MdbListSettingsRepository
 import com.nuvio.app.features.library.LibraryRepository
@@ -255,6 +263,7 @@ fun MetaDetailsScreen(
     var commentsError by remember(type, id) { mutableStateOf<String?>(null) }
     var selectedComment by remember(type, id) { mutableStateOf<TraktCommentReview?>(null) }
     val detailsScope = rememberCoroutineScope()
+    var showWatchStatusSheet by remember(type, id) { mutableStateOf(false) }
     var showLibraryListPicker by remember(type, id) { mutableStateOf(false) }
     var pickerTabs by remember(type, id) { mutableStateOf<List<TrackingLibraryTab>>(emptyList()) }
     var pickerMembership by remember(type, id) { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
@@ -1233,7 +1242,7 @@ fun MetaDetailsScreen(
                                     shuffleEnabled = shuffleSettings.enabled,
                                     onPrimaryPlayLongClick = onPrimaryPlayLongClick,
                                     onSaveClick = toggleSaved,
-                                    onSaveLongClick = openLibraryListPicker,
+                                    onSaveLongClick = { showWatchStatusSheet = true },
                                     onWatchedClick = toggleWatched,
                                     showManualPlayOption = showManualPlayOption,
                                     preferredEpisodeSeasonNumber = seriesAction?.seasonNumber,
@@ -1342,6 +1351,7 @@ fun MetaDetailsScreen(
                             backgroundColor = dominantBackdropColor.takeIf { dominantColorEnabled },
                             onBack = onBackFromDetails,
                             onToggleSaved = toggleSaved,
+                            onWatchStatusClick = { showWatchStatusSheet = true },
                         )
 
                         selectedEpisodeForActions
@@ -1605,6 +1615,41 @@ fun MetaDetailsScreen(
                                 onDismiss = { selectedComment = null },
                             )
                         }
+
+                        if (showWatchStatusSheet) {
+                            val currentWatchStatus = when {
+                                isWatched -> WatchStatus.Completed
+                                isSaved -> WatchStatus.PlanToWatch
+                                else -> WatchStatus.None
+                            }
+                            WatchStatusBottomSheet(
+                                currentStatus = currentWatchStatus,
+                                onStatusSelected = { status ->
+                                    when (status) {
+                                        WatchStatus.Completed -> {
+                                            if (!isWatched) toggleWatched()
+                                        }
+                                        WatchStatus.PlanToWatch -> {
+                                            if (!isSaved) toggleSaved()
+                                        }
+                                        WatchStatus.Watching -> {
+                                            if (!isSaved) toggleSaved()
+                                        }
+                                        WatchStatus.OnHold -> {
+                                            if (!isSaved) toggleSaved()
+                                        }
+                                        WatchStatus.Dropped -> {
+                                            if (isSaved) toggleSaved()
+                                        }
+                                        WatchStatus.None -> {
+                                            if (isWatched) toggleWatched()
+                                            if (isSaved) toggleSaved()
+                                        }
+                                    }
+                                },
+                                onDismiss = { showWatchStatusSheet = false },
+                            )
+                        }
                     }
                 }
             }
@@ -1793,6 +1838,7 @@ private fun DetailHeaderOverlay(
     backgroundColor: Color?,
     onBack: () -> Unit,
     onToggleSaved: () -> Unit,
+    onWatchStatusClick: () -> Unit = {},
 ) {
     val headerTarget = if (isHeroCollapsed.value) 1f else 0f
     val headerProgress by animateFloatAsState(
@@ -1805,17 +1851,100 @@ private fun DetailHeaderOverlay(
     )
 
     if (headerProgress <= 0.05f) {
-        NuvioBackButton(
-            onClick = onBack,
+        Row(
             modifier = Modifier
+                .fillMaxWidth()
                 .padding(
                     start = 12.dp,
+                    end = 12.dp,
                     top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 8.dp,
                 )
                 .zIndex(2f),
-            containerColor = Color.Transparent,
-            contentColor = MaterialTheme.colorScheme.onBackground,
-        )
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            NuvioBackButton(
+                onClick = onBack,
+                containerColor = Color.Transparent,
+                contentColor = MaterialTheme.colorScheme.onBackground,
+            )
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                // Cast Icon
+                androidx.compose.material3.IconButton(
+                    onClick = {
+                        NuvioToastController.show("Casting will be available during playback")
+                    },
+                    modifier = Modifier.size(36.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Cast,
+                        contentDescription = "Cast",
+                        tint = MaterialTheme.colorScheme.onBackground,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+
+                // Notification Bell
+                androidx.compose.material3.IconButton(
+                    onClick = {
+                        NuvioToastController.show("Subscribed to release notifications for ${meta.name}")
+                    },
+                    modifier = Modifier.size(36.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.NotificationsNone,
+                        contentDescription = "Notifications",
+                        tint = MaterialTheme.colorScheme.onBackground,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+
+                // Bookmark / Watch status
+                androidx.compose.material3.IconButton(
+                    onClick = onWatchStatusClick,
+                    modifier = Modifier.size(36.dp),
+                ) {
+                    Icon(
+                        imageVector = if (isSaved) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
+                        contentDescription = "Watch Status",
+                        tint = if (isSaved) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+
+                // Share
+                androidx.compose.material3.IconButton(
+                    onClick = {
+                        NuvioToastController.show("Share link copied: ${meta.name}")
+                    },
+                    modifier = Modifier.size(36.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Share,
+                        contentDescription = "Share",
+                        tint = MaterialTheme.colorScheme.onBackground,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+
+                // Search
+                androidx.compose.material3.IconButton(
+                    onClick = onBack,
+                    modifier = Modifier.size(36.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Search,
+                        contentDescription = "Search",
+                        tint = MaterialTheme.colorScheme.onBackground,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+            }
+        }
     }
 
     DetailFloatingHeader(

@@ -99,6 +99,7 @@ data class PluginSubtitleResult(
 
 data class PluginsUiState(
     val pluginsEnabled: Boolean = true,
+    val cloudstreamModeEnabled: Boolean = true,
     val groupStreamsByRepository: Boolean = false,
     val repositories: List<PluginRepositoryItem> = emptyList(),
     val scrapers: List<PluginScraper> = emptyList(),
@@ -112,6 +113,7 @@ sealed interface AddPluginRepositoryResult {
 @Serializable
 internal data class StoredPluginsState(
     val pluginsEnabled: Boolean = true,
+    val cloudstreamModeEnabled: Boolean = true,
     val groupStreamsByRepository: Boolean = false,
     val repositories: List<StoredPluginRepository> = emptyList(),
     val scrapers: List<StoredPluginScraper> = emptyList(),
@@ -153,6 +155,7 @@ internal data class RestoredPluginScraper(
 internal fun PluginsUiState.toStoredPluginsState(): StoredPluginsState =
     StoredPluginsState(
         pluginsEnabled = pluginsEnabled,
+        cloudstreamModeEnabled = cloudstreamModeEnabled,
         groupStreamsByRepository = groupStreamsByRepository,
         repositories = repositories.map { repository ->
             StoredPluginRepository(

@@ -33,6 +33,8 @@ actual object PluginRepository {
 
     actual fun setPluginsEnabled(enabled: Boolean) = Unit
 
+    actual fun setCloudstreamModeEnabled(enabled: Boolean) = Unit
+
     actual fun setGroupStreamsByRepository(enabled: Boolean) = Unit
 
     actual fun setLocalPluginSearchPaused(paused: Boolean) = Unit

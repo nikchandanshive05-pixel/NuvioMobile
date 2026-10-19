@@ -314,6 +314,12 @@ actual object PluginRepository {
         persist()
     }
 
+    actual fun setCloudstreamModeEnabled(enabled: Boolean) {
+        initialize()
+        _uiState.update { it.copy(cloudstreamModeEnabled = enabled) }
+        persist()
+    }
+
     actual fun setGroupStreamsByRepository(enabled: Boolean) {
         initialize()
         _uiState.update { it.copy(groupStreamsByRepository = enabled) }
