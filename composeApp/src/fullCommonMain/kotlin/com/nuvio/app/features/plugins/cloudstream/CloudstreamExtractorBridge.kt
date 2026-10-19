@@ -4,6 +4,7 @@ import com.fleeksoft.ksoup.Ksoup
 import com.nuvio.app.features.streams.StreamBadge
 import com.nuvio.app.features.streams.StreamBehaviorHints
 import com.nuvio.app.features.streams.StreamItem
+import com.nuvio.app.features.streams.StreamProxyHeaders
 import com.nuvio.app.features.streams.StreamSubtitle
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
@@ -214,7 +215,7 @@ object CloudstreamExtractorBridge {
             addonLogo = "https://raw.githubusercontent.com/recloudstream/cloudstream/master/app/src/main/res/drawable/ic_launcher.png",
             streamType = "direct",
             behaviorHints = StreamBehaviorHints(
-                proxyHeaders = this.headers,
+                proxyHeaders = StreamProxyHeaders(request = this.headers),
                 notWebReady = false,
             ),
             externalSubtitles = this.subtitles,
