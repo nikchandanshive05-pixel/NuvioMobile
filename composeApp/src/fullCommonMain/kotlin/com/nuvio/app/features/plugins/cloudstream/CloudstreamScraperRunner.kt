@@ -21,8 +21,8 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import java.net.URLEncoder
-import java.util.UUID
+import kotlin.random.Random
+
 
 /**
  * Cloudstream Provider & Scraper Runner
@@ -243,7 +243,7 @@ object CloudstreamScraperRunner {
                 return cachedTHashCookie!!
             }
 
-            val uid = UUID.randomUUID().toString()
+            val uid = generateUuid()
             val verifyUrl = "$NETMIRROR_BASE/verify.php"
             val headers = mapOf(
                 "Content-Type" to "application/x-www-form-urlencoded",
@@ -251,7 +251,7 @@ object CloudstreamScraperRunner {
                 "Origin" to NETMIRROR_BASE,
                 "Referer" to "$NETMIRROR_BASE/verify2",
             )
-            val formBody = "g-recaptcha-response=${URLEncoder.encode(uid, "UTF-8")}"
+            val formBody = "g-recaptcha-response=${urlEncode(uid)}"
 
             val rawResponse = runCatching {
                 httpRequestRaw(
@@ -322,7 +322,7 @@ object CloudstreamScraperRunner {
         episode: Int?,
     ): String? {
         val unixTime = Clock.System.now().epochSeconds
-        val encodedTitle = URLEncoder.encode(title.trim(), "UTF-8")
+        val encodedTitle = urlEncode(title.trim())
         val path = if (endpointPrefix.isBlank()) "search.php" else "$endpointPrefix/search.php"
         val searchUrl = "$NETMIRROR_BASE/mobile/$path?s=$encodedTitle&t=$unixTime"
 
@@ -581,7 +581,7 @@ object CloudstreamScraperRunner {
         providerName: String,
     ): List<PluginRuntimeResult> {
         val query = if (year != null) "$title $year" else title
-        val encodedQuery = URLEncoder.encode(query, "UTF-8")
+        val encodedQuery = urlEncode(query)
         val searchUrl = "https://streamflix.one/search?q=$encodedQuery"
 
         return runCatching {
@@ -639,7 +639,7 @@ object CloudstreamScraperRunner {
         providerName: String,
     ): List<PluginRuntimeResult> {
         val query = if (year != null) "$title $year" else title
-        val encoded = URLEncoder.encode(query, "UTF-8")
+        val encoded = urlEncode(query)
         val searchUrl = "https://cinevood.hair/?s=$encoded"
 
         return runCatching {
@@ -698,7 +698,7 @@ object CloudstreamScraperRunner {
         providerName: String,
     ): List<PluginRuntimeResult> {
         val query = if (year != null) "$title $year" else title
-        val encoded = URLEncoder.encode(query, "UTF-8")
+        val encoded = urlEncode(query)
         val searchUrl = "https://hdo.app/search/$encoded"
 
         return runCatching {
@@ -749,4 +749,39 @@ object CloudstreamScraperRunner {
         log.d { "Generic provider search for '$title' ($query) via ${scraper.name}" }
         return emptyList()
     }
+
+    private fun generateUuid(): String {
+        val bytes = Random.Default.nextBytes(16)
+        bytes[6] = ((bytes[6].toInt() and 0x0f) or 0x40).toByte()
+        bytes[8] = ((bytes[8].toInt() and 0x3f) or 0x80).toByte()
+        val hexChars = "0123456789abcdef"
+        val sb = StringBuilder(36)
+        for (i in bytes.indices) {
+            if (i == 4 || i == 6 || i == 8 || i == 10) {
+                sb.append('-')
+            }
+            val b = bytes[i].toInt() and 0xFF
+            sb.append(hexChars[b shr 4])
+            sb.append(hexChars[b and 0x0F])
+        }
+        return sb.toString()
+    }
+
+    private fun urlEncode(value: String): String = buildString {
+        val hex = "0123456789ABCDEF"
+        value.encodeToByteArray().forEach { byte ->
+            val code = byte.toInt() and 0xFF
+            val isUnreserved = (code in 'A'.code..'Z'.code) ||
+                (code in 'a'.code..'z'.code) ||
+                (code in '0'.code..'9'.code) ||
+                code == '-'.code || code == '.'.code || code == '_'.code || code == '~'.code
+            if (isUnreserved) append(code.toChar())
+            else {
+                append('%')
+                append(hex[code shr 4])
+                append(hex[code and 0x0F])
+            }
+        }
+    }
 }
+
