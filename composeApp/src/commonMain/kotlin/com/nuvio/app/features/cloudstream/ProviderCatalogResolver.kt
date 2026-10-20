@@ -65,6 +65,135 @@ object ProviderCatalogResolver {
     // In-memory cache for ultra-fast, lag-free switching between providers
     private val providerCache = mutableMapOf<String, ProviderCatalogResult>()
 
+    fun clearCache(providerId: String? = null) {
+        if (providerId == null) {
+            providerCache.clear()
+        } else {
+            providerCache.remove(providerId)
+        }
+    }
+
+    /**
+     * Resolves curated discovery feeds for an installed CloudStream scraper plugin.
+     */
+    suspend fun resolveScraperCatalog(
+        scraper: com.nuvio.app.features.plugins.PluginScraper,
+    ): ProviderCatalogResult = withContext(Dispatchers.Default) {
+        providerCache[scraper.id]?.let { return@withContext it }
+
+        val apiKey = TmdbSettingsRepository.effectiveApiKey()
+        val language = normalizeTmdbLanguage(TmdbSettingsRepository.snapshot().language)
+        val lower = scraper.name.lowercase()
+
+        val isAnime = lower.contains("anime") || lower.contains("koto") || lower.contains("suge")
+        val isIndian = lower.contains("hindi") || lower.contains("tamil") || lower.contains("telugu") ||
+            lower.contains("cinevood") || lower.contains("desi") || lower.contains("india") || lower.contains("cricify")
+
+        val genres = when {
+            isAnime -> "16" // Animation
+            else -> null
+        }
+        val origLang = when {
+            isAnime -> "ja"
+            isIndian -> "hi|ta|te|ml"
+            else -> null
+        }
+
+        coroutineScope {
+            val trendingMoviesDeferred = async {
+                fetchDiscover(
+                    endpoint = "discover/movie",
+                    apiKey = apiKey,
+                    language = language,
+                    sortBy = "popularity.desc",
+                    mediaType = "movie",
+                    withKeywords = genres,
+                )
+            }
+            val trendingTvDeferred = async {
+                fetchDiscover(
+                    endpoint = "discover/tv",
+                    apiKey = apiKey,
+                    language = language,
+                    sortBy = "popularity.desc",
+                    mediaType = "series",
+                    withKeywords = genres,
+                )
+            }
+            val topRatedDeferred = async {
+                fetchDiscover(
+                    endpoint = "discover/movie",
+                    apiKey = apiKey,
+                    language = language,
+                    sortBy = "vote_average.desc",
+                    voteCountGte = 100,
+                    mediaType = "movie",
+                    withKeywords = genres,
+                )
+            }
+
+            val movies = trendingMoviesDeferred.await()
+            val tvShows = trendingTvDeferred.await()
+            val topRated = topRatedDeferred.await()
+
+            val heroItems = (movies.take(3) + tvShows.take(3)).shuffled().take(5)
+            val sections = mutableListOf<HomeCatalogSection>()
+
+            if (movies.isNotEmpty() || tvShows.isNotEmpty()) {
+                sections.add(
+                    HomeCatalogSection(
+                        key = "provider_${scraper.id}_trending",
+                        title = "Trending on ${scraper.name}",
+                        subtitle = "Popular right now",
+                        addonName = scraper.name,
+                        target = CatalogTarget.Library(contentType = "all", sectionType = "provider_trending"),
+                        items = (movies.take(5) + tvShows.take(5)).shuffled(),
+                    )
+                )
+            }
+            if (movies.isNotEmpty() && scraper.supportsType("movie")) {
+                sections.add(
+                    HomeCatalogSection(
+                        key = "provider_${scraper.id}_movies",
+                        title = "Featured Movies",
+                        subtitle = "${scraper.name} Movie Catalog",
+                        addonName = scraper.name,
+                        target = CatalogTarget.Library(contentType = "movie", sectionType = "provider_movies"),
+                        items = movies,
+                    )
+                )
+            }
+            if (tvShows.isNotEmpty() && scraper.supportsType("tv")) {
+                sections.add(
+                    HomeCatalogSection(
+                        key = "provider_${scraper.id}_series",
+                        title = "Featured Series",
+                        subtitle = "${scraper.name} TV Shows",
+                        addonName = scraper.name,
+                        target = CatalogTarget.Library(contentType = "series", sectionType = "provider_series"),
+                        items = tvShows,
+                    )
+                )
+            }
+            if (topRated.isNotEmpty()) {
+                sections.add(
+                    HomeCatalogSection(
+                        key = "provider_${scraper.id}_top_rated",
+                        title = "Top Rated",
+                        subtitle = "Highest Rated Releases",
+                        addonName = scraper.name,
+                        target = CatalogTarget.Library(contentType = "movie", sectionType = "provider_top_rated"),
+                        items = topRated,
+                    )
+                )
+            }
+
+            val result = ProviderCatalogResult(heroItems = heroItems, sections = sections)
+            providerCache[scraper.id] = result
+            result
+        }
+    }
+
     /**
      * Resolves curated sections for a given CloudStream provider (Netflix, Prime, HotStar).
      */

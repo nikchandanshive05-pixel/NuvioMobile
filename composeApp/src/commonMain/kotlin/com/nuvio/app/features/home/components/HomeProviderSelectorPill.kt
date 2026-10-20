@@ -44,6 +44,9 @@ data class CloudStreamProviderChoice(
     val name: String,
     val subtitle: String,
     val icon: ImageVector,
+    val flag: String = "",
+    val category: String = "All", // "All", "Movies", "TV Series", "Anime"
+    val isNsfw: Boolean = false,
 )
 
 val adultCloudstreamProvider = CloudStreamProviderChoice(
@@ -51,6 +54,9 @@ val adultCloudstreamProvider = CloudStreamProviderChoice(
     name = "CNC Verse - 18+ Adult",
     subtitle = "Adult Releases & Erotic Thrillers",
     icon = Icons.Default.PlayArrow,
+    flag = "🔞",
+    category = "Movies",
+    isNsfw = true,
 )
 
 val defaultCloudstreamProviders = listOf(
@@ -59,26 +65,61 @@ val defaultCloudstreamProviders = listOf(
         name = "Unified Catalog",
         subtitle = "Nuvio Aggregated (TMDB & Addons)",
         icon = Icons.Default.PlayArrow,
+        flag = "🌐",
+        category = "All",
     ),
     CloudStreamProviderChoice(
         id = "cnc_netflix",
         name = "CNC Verse - Netflix",
         subtitle = "Trending Netflix Releases & Originals",
         icon = Icons.Default.PlayArrow,
+        flag = "🇮🇳",
+        category = "All",
     ),
     CloudStreamProviderChoice(
         id = "cnc_prime",
         name = "CNC Verse - Prime Video",
         subtitle = "Amazon Prime Video Catalog & Top 10",
         icon = Icons.Default.PlayArrow,
+        flag = "🇮🇳",
+        category = "All",
     ),
     CloudStreamProviderChoice(
         id = "cnc_hotstar",
         name = "CNC Verse - HotStar",
         subtitle = "Disney+ HotStar & Regional Movies",
         icon = Icons.Default.PlayArrow,
+        flag = "🇮🇳",
+        category = "All",
     ),
 )
+
+private fun resolveScraperFlag(scraper: com.nuvio.app.features.plugins.PluginScraper): String {
+    val lower = scraper.name.lowercase()
+    val langs = scraper.contentLanguage.map { it.lowercase() }
+    return when {
+        lower.contains("anime") || lower.contains("koto") || lower.contains("suge") || "ja" in langs -> "🇯🇵"
+        lower.contains("korean") || lower.contains("drama") || "ko" in langs -> "🇰🇷"
+        lower.contains("hindi") || lower.contains("tamil") || lower.contains("telugu") || lower.contains("desi") ||
+            lower.contains("india") || lower.contains("cricify") || lower.contains("cinevood") || "hi" in langs || "ta" in langs || "te" in langs -> "🇮🇳"
+        lower.contains("arabic") || "ar" in langs -> "🇸🇦"
+        lower.contains("french") || "fr" in langs -> "🇫🇷"
+        lower.contains("spanish") || "es" in langs -> "🇪🇸"
+        lower.contains("russian") || lower.contains("rezka") || "ru" in langs -> "🇷🇺"
+        else -> "🇬🇧"
+    }
+}
+
+private fun resolveScraperCategory(scraper: com.nuvio.app.features.plugins.PluginScraper): String {
+    val lower = scraper.name.lowercase()
+    val types = scraper.supportedTypes.map { it.lowercase() }
+    return when {
+        lower.contains("anime") || lower.contains("koto") || lower.contains("suge") -> "Anime"
+        types.contains("tv") && !types.contains("movie") -> "TV Series"
+        types.contains("movie") && !types.contains("tv") -> "Movies"
+        else -> "All"
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -87,24 +128,69 @@ fun HomeProviderSelectorPill(
     onProviderSelected: (String) -> Unit,
     enabledProviderIds: Set<String> = setOf("unified", "cnc_netflix", "cnc_prime", "cnc_hotstar"),
     nsfwEnabled: Boolean = false,
+    installedScrapers: List<com.nuvio.app.features.plugins.PluginScraper> = emptyList(),
     modifier: Modifier = Modifier,
 ) {
     var showSheet by remember { mutableStateOf(false) }
+    var selectedCategoryFilter by remember { mutableStateOf("All") }
 
-    val availableProviders = remember(enabledProviderIds, nsfwEnabled) {
-        val base = defaultCloudstreamProviders.filter { it.id in enabledProviderIds || it.id == "unified" }
-        if (nsfwEnabled) {
-            base + adultCloudstreamProvider
-        } else {
-            base
+    val availableProviders = remember(enabledProviderIds, nsfwEnabled, installedScrapers) {
+        val base = mutableListOf<CloudStreamProviderChoice>()
+        // 1. Default built-ins
+        defaultCloudstreamProviders.forEach { p ->
+            if (p.id in enabledProviderIds || p.id == "unified") {
+                base.add(p)
+            }
         }
+
+        // 2. Installed CloudStream repository providers
+        installedScrapers.forEach { scraper ->
+            val isAdultScraper = scraper.name.contains("adult", ignoreCase = true) ||
+                scraper.name.contains("18+", ignoreCase = true) ||
+                scraper.description.contains("18+", ignoreCase = true) ||
+                scraper.description.contains("nsfw", ignoreCase = true)
+
+            // If it's adult and NSFW is off, skip completely
+            if (isAdultScraper && !nsfwEnabled) return@forEach
+
+            // Check if provider is enabled
+            val isEnabled = scraper.enabled && (scraper.id in enabledProviderIds || enabledProviderIds.isEmpty() || scraper.id !in enabledProviderIds.filter { it.startsWith("http") })
+            if (isEnabled) {
+                base.add(
+                    CloudStreamProviderChoice(
+                        id = scraper.id,
+                        name = scraper.name,
+                        subtitle = scraper.description.ifBlank { "CloudStream Community Provider" },
+                        icon = Icons.Default.PlayArrow,
+                        flag = resolveScraperFlag(scraper),
+                        category = resolveScraperCategory(scraper),
+                        isNsfw = isAdultScraper,
+                    )
+                )
+            }
+        }
+
+        // 3. Built-in Adult provider if NSFW is enabled
+        if (nsfwEnabled) {
+            base.add(adultCloudstreamProvider)
+        }
+
+        base
     }
 
+    // Safe choice: NEVER fall back to adult or disabled provider when not available
     val activeChoice = remember(currentProviderId, availableProviders) {
         availableProviders.find { it.id == currentProviderId }
-            ?: defaultCloudstreamProviders.find { it.id == currentProviderId }
+            ?: availableProviders.firstOrNull { it.id == "unified" }
             ?: availableProviders.firstOrNull()
             ?: defaultCloudstreamProviders.first()
+    }
+
+    // Auto-heal current selection if it was disabled (e.g. NSFW toggled off)
+    LaunchedEffect(activeChoice.id, currentProviderId) {
+        if (activeChoice.id != currentProviderId && availableProviders.none { it.id == currentProviderId }) {
+            onProviderSelected(activeChoice.id)
+        }
     }
 
     Surface(
@@ -121,12 +207,16 @@ fun HomeProviderSelectorPill(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            Icon(
-                imageVector = activeChoice.icon,
-                contentDescription = null,
-                modifier = Modifier.size(16.dp),
-                tint = MaterialTheme.colorScheme.primary,
-            )
+            if (activeChoice.flag.isNotBlank()) {
+                Text(text = activeChoice.flag, fontSize = 14.sp)
+            } else {
+                Icon(
+                    imageVector = activeChoice.icon,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+            }
             Text(
                 text = activeChoice.name,
                 style = MaterialTheme.typography.labelLarge.copy(
@@ -153,8 +243,8 @@ fun HomeProviderSelectorPill(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 20.dp)
-                    .padding(bottom = 32.dp),
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 24.dp),
             ) {
                 Text(
                     text = "Select Streaming Provider",
@@ -163,67 +253,116 @@ fun HomeProviderSelectorPill(
                         fontSize = 20.sp,
                     ),
                     color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.padding(bottom = 16.dp, top = 4.dp),
+                    modifier = Modifier.padding(bottom = 12.dp, top = 4.dp),
                 )
 
-                availableProviders.forEach { provider ->
-                    val isSelected = provider.id == currentProviderId
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
-                            .clickable {
-                                onProviderSelected(provider.id)
-                                showSheet = false
-                            }
-                            .padding(vertical = 12.dp, horizontal = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(14.dp),
+                // Category Tabs (All, Movies, TV Series, Anime)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    listOf("All", "Movies", "TV Series", "Anime").forEach { cat ->
+                        val isCatSelected = selectedCategoryFilter == cat
+                        Surface(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(16.dp))
+                                .clickable { selectedCategoryFilter = cat },
+                            color = if (isCatSelected) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.08f),
+                            shape = RoundedCornerShape(16.dp),
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .background(
-                                        color = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
-                                        else Color.White.copy(alpha = 0.06f),
-                                        shape = CircleShape,
-                                    ),
-                                contentAlignment = Alignment.Center,
+                            Text(
+                                text = cat,
+                                style = MaterialTheme.typography.labelMedium.copy(
+                                    fontWeight = if (isCatSelected) FontWeight.Bold else FontWeight.Normal,
+                                ),
+                                color = if (isCatSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                            )
+                        }
+                    }
+                }
+
+                val displayedProviders = availableProviders.filter { provider ->
+                    when (selectedCategoryFilter) {
+                        "All" -> true
+                        "Anime" -> provider.category == "Anime"
+                        "Movies" -> provider.category == "Movies" || provider.category == "All"
+                        "TV Series" -> provider.category == "TV Series" || provider.category == "All"
+                        else -> true
+                    }
+                }
+
+                androidx.compose.foundation.lazy.LazyColumn(
+                    modifier = Modifier.fillMaxWidth().height(360.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    items(displayedProviders.size, key = { displayedProviders[it].id }) { index ->
+                        val provider = displayedProviders[index]
+                        val isSelected = provider.id == currentProviderId
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable {
+                                    onProviderSelected(provider.id)
+                                    showSheet = false
+                                }
+                                .padding(vertical = 10.dp, horizontal = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(14.dp),
                             ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(38.dp)
+                                        .background(
+                                            color = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                                            else Color.White.copy(alpha = 0.06f),
+                                            shape = CircleShape,
+                                        ),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    if (provider.flag.isNotBlank()) {
+                                        Text(text = provider.flag, fontSize = 16.sp)
+                                    } else {
+                                        Icon(
+                                            imageVector = provider.icon,
+                                            contentDescription = null,
+                                            tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(18.dp),
+                                        )
+                                    }
+                                }
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = provider.name,
+                                        style = MaterialTheme.typography.bodyLarge.copy(
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                        ),
+                                        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                                    )
+                                    Text(
+                                        text = provider.subtitle,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                    )
+                                }
+                            }
+
+                            if (isSelected) {
                                 Icon(
-                                    imageVector = provider.icon,
-                                    contentDescription = null,
-                                    tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = "Selected",
+                                    tint = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.size(20.dp),
                                 )
                             }
-                            Column {
-                                Text(
-                                    text = provider.name,
-                                    style = MaterialTheme.typography.bodyLarge.copy(
-                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                    ),
-                                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                                )
-                                Text(
-                                    text = provider.subtitle,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        }
-
-                        if (isSelected) {
-                            Icon(
-                                imageVector = Icons.Default.Check,
-                                contentDescription = "Selected",
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(22.dp),
-                            )
                         }
                     }
                 }

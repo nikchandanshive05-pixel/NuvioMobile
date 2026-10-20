@@ -892,18 +892,37 @@ fun HomeScreen(
     }
 
     // Dynamic Provider Catalog and Fallback Loader
-    LaunchedEffect(selectedProviderId, hasActiveAddons, hasServerLibraries, pluginsUiState.enabledProviderIds, pluginsUiState.nsfwEnabled) {
-        val isProviderAvailable = when (selectedProviderId) {
-            "unified" -> true
-            "cnc_adult" -> pluginsUiState.nsfwEnabled
+    LaunchedEffect(selectedProviderId, hasActiveAddons, hasServerLibraries, pluginsUiState.enabledProviderIds, pluginsUiState.nsfwEnabled, pluginsUiState.scrapers) {
+        if (!pluginsUiState.nsfwEnabled) {
+            ProviderCatalogResolver.clearCache("cnc_adult")
+            if (selectedProviderId == "cnc_adult") {
+                selectedProviderId = "unified"
+                providerCatalogResult = null
+                return@LaunchedEffect
+            }
+        }
+
+        val matchingInstalledScraper = pluginsUiState.scrapers.find { it.id == selectedProviderId }
+        val isProviderAvailable = when {
+            selectedProviderId == "unified" -> true
+            selectedProviderId == "cnc_adult" -> pluginsUiState.nsfwEnabled
+            matchingInstalledScraper != null -> matchingInstalledScraper.enabled
             else -> selectedProviderId in pluginsUiState.enabledProviderIds
         }
+
         if (!isProviderAvailable) {
             selectedProviderId = "unified"
+            providerCatalogResult = null
             return@LaunchedEffect
         }
 
-        if (selectedProviderId != "unified") {
+        if (matchingInstalledScraper != null) {
+            isProviderCatalogLoading = true
+            providerCatalogResult = runCatching {
+                ProviderCatalogResolver.resolveScraperCatalog(matchingInstalledScraper)
+            }.getOrNull()
+            isProviderCatalogLoading = false
+        } else if (selectedProviderId != "unified") {
             isProviderCatalogLoading = true
             providerCatalogResult = runCatching {
                 ProviderCatalogResolver.resolveProviderCatalog(selectedProviderId)
@@ -1086,6 +1105,7 @@ fun HomeScreen(
                             onProviderSelected = { selectedProviderId = it },
                             enabledProviderIds = pluginsUiState.enabledProviderIds,
                             nsfwEnabled = pluginsUiState.nsfwEnabled,
+                            installedScrapers = pluginsUiState.scrapers,
                         )
                     }
                 }

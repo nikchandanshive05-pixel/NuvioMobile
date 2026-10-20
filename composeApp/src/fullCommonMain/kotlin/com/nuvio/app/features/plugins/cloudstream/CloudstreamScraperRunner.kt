@@ -322,7 +322,11 @@ object CloudstreamScraperRunner {
         episode: Int?,
     ): String? {
         val unixTime = WatchProgressClock.nowEpochMs() / 1000L
-        val encodedTitle = urlEncode(title.trim())
+        val cleanSearchTitle = title
+            .replace(Regex("""[:\-_/\\#?.,!|]"""), " ")
+            .replace(Regex("""\s+"""), " ")
+            .trim()
+        val encodedTitle = urlEncode(cleanSearchTitle)
         val path = if (endpointPrefix.isBlank()) "search.php" else "$endpointPrefix/search.php"
         val searchUrl = "$NETMIRROR_BASE/mobile/$path?s=$encodedTitle&t=$unixTime"
 

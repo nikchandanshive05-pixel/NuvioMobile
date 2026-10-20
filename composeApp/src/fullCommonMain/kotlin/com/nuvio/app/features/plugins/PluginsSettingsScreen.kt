@@ -360,6 +360,51 @@ fun PluginsSettingsPageContent(
                 )
             }
 
+            // Installed Repository Scrapers Visibility Toggles
+            if (sortedScrapers.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(10.dp))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Text(
+                    text = "Installed CloudStream Providers",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                sortedScrapers.forEach { scraper ->
+                    val isScraperEnabledOnHome = scraper.id in uiState.enabledProviderIds || uiState.enabledProviderIds.isEmpty() || scraper.id !in uiState.enabledProviderIds.filter { it.startsWith("http") }
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = scraper.name,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                            Text(
+                                text = scraper.description.ifBlank { "CloudStream Provider" },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                            )
+                        }
+                        Switch(
+                            checked = scraper.enabled && isScraperEnabledOnHome,
+                            onCheckedChange = { isEnabled ->
+                                PluginRepository.toggleScraper(scraper.id, isEnabled)
+                                PluginRepository.toggleProviderEnabled(scraper.id, isEnabled)
+                            },
+                            enabled = scraper.manifestEnabled,
+                        )
+                    }
+                }
+            }
+
             Spacer(modifier = Modifier.height(14.dp))
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             Spacer(modifier = Modifier.height(14.dp))

@@ -322,6 +322,9 @@ actual object PluginRepository {
 
     actual fun setNsfwEnabled(enabled: Boolean) {
         initialize()
+        if (!enabled) {
+            com.nuvio.app.features.cloudstream.ProviderCatalogResolver.clearCache("cnc_adult")
+        }
         _uiState.update { it.copy(nsfwEnabled = enabled) }
         persist()
     }
@@ -351,8 +354,14 @@ actual object PluginRepository {
 
     actual fun getEnabledScrapersForType(type: String): List<PluginScraper> {
         initialize()
-        if (!_uiState.value.pluginsEnabled) return emptyList()
-        return _uiState.value.scrapers.filter { scraper ->
+        val state = _uiState.value
+        if (!state.pluginsEnabled) return emptyList()
+        return state.scrapers.filter { scraper ->
+            val isAdult = scraper.name.contains("adult", ignoreCase = true) ||
+                scraper.name.contains("18+", ignoreCase = true) ||
+                scraper.description.contains("18+", ignoreCase = true) ||
+                scraper.description.contains("nsfw", ignoreCase = true)
+            if (isAdult && !state.nsfwEnabled) return@filter false
             scraper.enabled && scraper.supportsType(type)
         }
     }
