@@ -89,7 +89,7 @@ actual object CloudstreamExtensionRuntime {
 
     actual suspend fun load(scraper: PluginScraper, itemUrl: String): CloudstreamLoadedItem? =
         withContext(Dispatchers.IO) {
-            val provider = providers[scraperId] ?: return@withContext null
+            val provider = providerFor(scraper) ?: return@withContext null
             val method = suspendMethod(provider.javaClass, "load", 1) ?: return@withContext null
             val response = withTimeoutOrNull(25_000) {
                 invokeSuspend(provider, method, arrayOf(itemUrl))
@@ -121,7 +121,7 @@ actual object CloudstreamExtensionRuntime {
 
     actual suspend fun loadLinks(scraper: PluginScraper, dataUrl: String): List<PluginRuntimeResult> =
         withContext(Dispatchers.IO) {
-            val provider = providers[scraperId] ?: return@withContext emptyList()
+            val provider = providerFor(scraper) ?: return@withContext emptyList()
             val method = provider.javaClass.methods.firstOrNull {
                 it.name == "loadLinks" &&
                     it.parameterTypes.lastOrNull()?.name == "kotlin.coroutines.Continuation" &&
