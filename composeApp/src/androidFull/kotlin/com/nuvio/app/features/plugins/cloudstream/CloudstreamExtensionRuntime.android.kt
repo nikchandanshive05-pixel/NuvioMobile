@@ -141,8 +141,8 @@ actual object CloudstreamExtensionRuntime {
             } ?: return@withContext null
             if (response == null) return@withContext null
             val responseClass = response.javaClass.simpleName
-            val rawEpisodes = property(response, "episodes") as? Iterable<*>
-            val episodes = rawEpisodes.orEmpty().filterNotNull().mapNotNull { episode ->
+            val rawEpisodes = (property(response, "episodes") as? Iterable<*>)?.toList().orEmpty()
+            val episodes = rawEpisodes.filterNotNull().mapNotNull { episode ->
                 val dataUrl = property(episode, "data")?.toString()?.takeIf(String::isNotBlank)
                     ?: return@mapNotNull null
                 CloudstreamEpisode(
@@ -174,33 +174,33 @@ actual object CloudstreamExtensionRuntime {
             } ?: return@withContext emptyList()
             val links = Collections.synchronizedList(mutableListOf<PluginRuntimeResult>())
             val subtitles = Collections.synchronizedList(mutableListOf<PluginSubtitleResult>())
-            val callbacks = ArrayDeque<kotlin.jvm.functions.Function1<Any?, Unit>>()
-            callbacks.add(kotlin.jvm.functions.Function1 { subtitle ->
-                val url = property(subtitle, "url")?.toString().orEmpty()
-                if (url.isNotBlank()) subtitles += PluginSubtitleResult(
-                    url = url,
-                    language = property(subtitle, "lang")?.toString().orEmpty().ifBlank { "Unknown" },
-                    name = property(subtitle, "label")?.toString(),
-                )
-                Unit
-            })
-            callbacks.add(kotlin.jvm.functions.Function1 { link ->
-                val url = property(link, "url")?.toString().orEmpty()
-                if (url.isNotBlank()) links += PluginRuntimeResult(
-                    title = property(link, "name")?.toString().orEmpty().ifBlank { "Stream" },
-                    url = url,
-                    quality = property(link, "quality")?.toString(),
-                    provider = property(link, "source")?.toString().orEmpty().ifBlank { scraper.id.substringAfterLast(':') },
-                    type = property(link, "type")?.toString(),
-                    headers = property(link, "headers") as? Map<String, String>,
-                )
-                Unit
-            })
+            val callbacks: List<(Any?) -> Unit> = listOf(
+                { subtitle: Any? ->
+                    val url = property(subtitle, "url")?.toString().orEmpty()
+                    if (url.isNotBlank()) subtitles += PluginSubtitleResult(
+                        url = url,
+                        language = property(subtitle, "lang")?.toString().orEmpty().ifBlank { "Unknown" },
+                        name = property(subtitle, "label")?.toString(),
+                    )
+                },
+                { link: Any? ->
+                    val url = property(link, "url")?.toString().orEmpty()
+                    if (url.isNotBlank()) links += PluginRuntimeResult(
+                        title = property(link, "name")?.toString().orEmpty().ifBlank { "Stream" },
+                        url = url,
+                        quality = property(link, "quality")?.toString(),
+                        provider = property(link, "source")?.toString().orEmpty().ifBlank { scraper.id.substringAfterLast(':') },
+                        type = property(link, "type")?.toString(),
+                        headers = property(link, "headers") as? Map<String, String>,
+                    )
+                },
+            )
+            var callbackIndex = 0
             val args = method.parameterTypes.dropLast(1).mapIndexed { index, parameter ->
                 when {
                     index == 0 && parameter == String::class.java -> dataUrl
                     parameter == java.lang.Boolean.TYPE || parameter == java.lang.Boolean::class.java -> false
-                    parameter.name == "kotlin.jvm.functions.Function1" -> callbacks.removeFirst()
+                    parameter.name == "kotlin.jvm.functions.Function1" -> callbacks[callbackIndex++]
                     else -> null
                 }
             }.toTypedArray()
