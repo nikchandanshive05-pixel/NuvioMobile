@@ -109,8 +109,10 @@ actual object CloudstreamExtensionRuntime {
                         invokeSuspend(provider, getMainPage, arrayOf(1, request))
                     } ?: return@runCatching null
                     val lists = property(response, "items") as? Iterable<*> ?: return@runCatching null
-                    val items = lists.filterNotNull().flatMap { homeList ->
-                        (property(homeList, "list") as? Iterable<*>).orEmpty().filterNotNull().mapNotNull { item ->
+                    val items: List<CloudstreamSearchHit> = lists.filterNotNull().flatMap { homeList: Any ->
+                        val feedItems: List<Any?> =
+                            (property(homeList, "list") as? Iterable<*>)?.toList() ?: emptyList()
+                        feedItems.filterNotNull().mapNotNull { item: Any ->
                             val url = property(item, "url")?.toString().orEmpty()
                             val name = property(item, "name")?.toString().orEmpty()
                             if (url.isBlank() || name.isBlank()) return@mapNotNull null
@@ -141,8 +143,9 @@ actual object CloudstreamExtensionRuntime {
             } ?: return@withContext null
             if (response == null) return@withContext null
             val responseClass = response.javaClass.simpleName
-            val rawEpisodes = (property(response, "episodes") as? Iterable<*>)?.toList().orEmpty()
-            val episodes = rawEpisodes.filterNotNull().mapNotNull { episode ->
+            val rawEpisodes: List<Any?> =
+                (property(response, "episodes") as? Iterable<*>)?.toList() ?: emptyList()
+            val episodes: List<CloudstreamEpisode> = rawEpisodes.filterNotNull().mapNotNull { episode: Any ->
                 val dataUrl = property(episode, "data")?.toString()?.takeIf(String::isNotBlank)
                     ?: return@mapNotNull null
                 CloudstreamEpisode(
