@@ -470,6 +470,12 @@ kotlin {
                 if (androidDistribution == "full") {
                     implementation(files("libs/quickjs-kt-android-1.0.5-nuvio.aar"))
                     implementation(libs.ksoup)
+                    // CloudStream headless API runtime for loading .cs3 provider extensions.
+                    implementation("com.github.recloudstream.cloudstream:library:-SNAPSHOT")
+                    implementation("com.github.Blatzar:NiceHttp:0.4.11")
+                    implementation("org.jsoup:jsoup:1.18.3")
+                    implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.13.1")
+                    implementation("com.github.teamnewpipe:NewPipeExtractor:v0.25.2")
                 }
             }
         }
