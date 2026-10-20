@@ -1,5 +1,7 @@
 package com.nuvio.app.features.plugins
 
+import com.nuvio.app.features.plugins.cloudstream.CloudstreamLoadedItem
+import com.nuvio.app.features.plugins.cloudstream.CloudstreamSearchHit
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -44,6 +46,12 @@ actual object PluginRepository {
     actual fun setLocalPluginSearchPaused(paused: Boolean) = Unit
 
     actual fun getEnabledScrapersForType(type: String): List<PluginScraper> = emptyList()
+
+    actual suspend fun searchCloudstreamProviders(query: String): List<CloudstreamSearchHit> = emptyList()
+
+    actual suspend fun loadCloudstreamItem(scraperId: String, itemUrl: String): CloudstreamLoadedItem? = null
+
+    actual suspend fun loadCloudstreamLinks(scraperId: String, dataUrl: String): List<PluginRuntimeResult> = emptyList()
 
     actual suspend fun testScraper(scraperId: String): Result<List<PluginRuntimeResult>> =
         Result.failure(UnsupportedOperationException(getString(Res.string.plugins_error_unavailable_build)))

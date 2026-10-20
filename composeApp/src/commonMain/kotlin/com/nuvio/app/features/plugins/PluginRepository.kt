@@ -1,5 +1,7 @@
 package com.nuvio.app.features.plugins
 
+import com.nuvio.app.features.plugins.cloudstream.CloudstreamLoadedItem
+import com.nuvio.app.features.plugins.cloudstream.CloudstreamSearchHit
 import kotlinx.coroutines.flow.StateFlow
 
 expect object PluginRepository {
@@ -36,6 +38,12 @@ expect object PluginRepository {
     fun setLocalPluginSearchPaused(paused: Boolean)
 
     fun getEnabledScrapersForType(type: String): List<PluginScraper>
+
+    suspend fun searchCloudstreamProviders(query: String): List<CloudstreamSearchHit>
+
+    suspend fun loadCloudstreamItem(scraperId: String, itemUrl: String): CloudstreamLoadedItem?
+
+    suspend fun loadCloudstreamLinks(scraperId: String, dataUrl: String): List<PluginRuntimeResult>
 
     suspend fun testScraper(scraperId: String): Result<List<PluginRuntimeResult>>
 

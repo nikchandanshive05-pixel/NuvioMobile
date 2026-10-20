@@ -10,6 +10,9 @@ import com.nuvio.app.core.poster.withCustomPosterUrls
 import com.nuvio.app.features.addons.supportsResource
 import com.nuvio.app.features.home.HomeCatalogSettingsRepository
 import com.nuvio.app.features.home.filterReleasedItems
+import com.nuvio.app.features.plugins.PluginRepository
+import com.nuvio.app.features.plugins.CloudstreamContentId
+import com.nuvio.app.features.plugins.cloudstream.CloudstreamExtensionRuntime
 import com.nuvio.app.features.mdblist.MdbListMetadataService
 import com.nuvio.app.features.mdblist.MdbListSettingsRepository
 import com.nuvio.app.features.servers.ServerCatalog
@@ -60,6 +63,50 @@ object MetaDetailsRepository {
         val requestKey = "$type:$id"
         ServerItemRef.parse(id)?.let { ref ->
             loadServerMeta(requestKey, ref)
+            return
+        }
+        CloudstreamContentId.parse(id)?.let { cloudstreamId ->
+            activeRequestKey = requestKey
+            _uiState.value = MetaDetailsUiState(isLoading = true)
+            scope.launch {
+                val loaded = runCatching {
+                    PluginRepository.loadCloudstreamItem(cloudstreamId.scraperId, cloudstreamId.url)
+                }.getOrNull()
+                if (loaded == null) {
+                    _uiState.value = MetaDetailsUiState(errorMessage = getString(Res.string.details_load_failed_all_addons))
+                } else {
+                    val episodeVideos = loaded.episodes.map { episode ->
+                        MetaVideo(
+                            id = CloudstreamContentId.create(cloudstreamId.scraperId, episode.dataUrl),
+                            title = episode.title,
+                            season = episode.season,
+                            episode = episode.episode,
+                            overview = episode.overview,
+                        )
+                    }
+                    val videos = episodeVideos.ifEmpty {
+                        listOf(
+                            MetaVideo(
+                                id = CloudstreamContentId.create(cloudstreamId.scraperId, loaded.dataUrl),
+                                title = loaded.title,
+                            )
+                        )
+                    }
+                    val meta = MetaDetails(
+                        id = id,
+                        type = loaded.mediaType,
+                        name = loaded.title,
+                        poster = loaded.poster,
+                        description = loaded.description,
+                        releaseInfo = loaded.year?.toString(),
+                        defaultVideoId = videos.firstOrNull()?.id,
+                        videos = videos,
+                    )
+                    cachedMetaByRequestKey[requestKey] = CachedMetaEntry(baseMeta = meta)
+                    _uiState.value = MetaDetailsUiState(meta = meta)
+                }
+                activeRequestKey = requestKey
+            }
             return
         }
         val currentState = _uiState.value

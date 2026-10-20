@@ -12,6 +12,8 @@ import com.nuvio.app.features.servers.ServerCatalog
 import com.nuvio.app.features.servers.ServerMediaKind
 import com.nuvio.app.features.servers.serverMessage
 import com.nuvio.app.features.servers.ServerRepository
+import com.nuvio.app.features.plugins.PluginRepository
+import com.nuvio.app.features.plugins.CloudstreamContentId
 import com.nuvio.app.features.catalog.CATALOG_PAGE_SIZE
 import com.nuvio.app.features.catalog.CatalogPage
 import com.nuvio.app.features.catalog.CatalogTarget
@@ -91,7 +93,13 @@ object SearchRepository {
         val addonManifestErrorMessage = enabledAddons.firstEnabledManifestError()
         val activeAddons = enabledAddons.filter { it.manifest != null }
         val serverSearches = ServerCatalog.searchTargets()
-        if (activeAddons.isEmpty() && serverSearches.isEmpty()) {
+        PluginRepository.initialize()
+        val cloudstreamScrapers = (
+            PluginRepository.getEnabledScrapersForType("movie") +
+                PluginRepository.getEnabledScrapersForType("tv")
+            ).distinctBy { it.id }
+            .filter { it.filename.substringBefore('?').endsWith(".cs3", ignoreCase = true) }
+        if (activeAddons.isEmpty() && serverSearches.isEmpty() && cloudstreamScrapers.isEmpty()) {
             activeJob?.cancel()
             lastRequestKey = null
             _uiState.value = SearchUiState(
@@ -110,7 +118,7 @@ object SearchRepository {
             addons = activeAddons,
             query = normalizedQuery,
         )
-        if (requests.isEmpty() && serverSearches.isEmpty()) {
+        if (requests.isEmpty() && serverSearches.isEmpty() && cloudstreamScrapers.isEmpty()) {
             activeJob?.cancel()
             lastRequestKey = null
             _uiState.value = SearchUiState(
@@ -126,6 +134,8 @@ object SearchRepository {
             append(HomeCatalogSettingsRepository.snapshot().hideUnreleasedContent)
             append('|')
             append(hasPendingAddonManifests)
+            append("|cloudstream:")
+            append(cloudstreamScrapers.joinToString(",") { it.id })
             append('|')
             append(
                 requests.joinToString(separator = "|") { request ->
@@ -137,6 +147,29 @@ object SearchRepository {
                 append(ref.connection.selectedLibraries(ref.kind).joinToString(",") { it.id })
             }
         }
+        val cloudstreamLoaders: List<suspend () -> HomeCatalogSection> =
+            if (cloudstreamScrapers.isEmpty()) emptyList() else listOf({
+                val hits = PluginRepository.searchCloudstreamProviders(normalizedQuery)
+                val items = hits.map { hit ->
+                    MetaPreview(
+                        id = CloudstreamContentId.create(hit.scraperId, hit.url),
+                        type = hit.mediaType,
+                        name = "${hit.title} · ${hit.scraperName}",
+                        poster = hit.poster,
+                        releaseInfo = hit.year?.toString(),
+                        description = "CloudStream provider: ${hit.scraperName}",
+                    )
+                }
+                require(items.isNotEmpty()) { "No CloudStream providers returned results." }
+                HomeCatalogSection(
+                    key = "cloudstream_search",
+                    title = "CloudStream Providers",
+                    subtitle = "Search results from installed providers",
+                    addonName = "CloudStream",
+                    target = CatalogTarget.Library(contentType = "all", sectionType = "cloudstream_search"),
+                    items = items,
+                )
+            })
         val loaders: List<suspend () -> HomeCatalogSection> =
             requests.map { request -> suspend { request.toSection(forceRefresh = forceRefresh) } } +
                 serverSearches.map { ref ->
@@ -147,7 +180,7 @@ object SearchRepository {
                             }
                         }
                     }
-                }
+                } + cloudstreamLoaders
         if (canReuseRequestState(forceRefresh, requestKey, lastRequestKey)) return
         lastRequestKey = requestKey
 

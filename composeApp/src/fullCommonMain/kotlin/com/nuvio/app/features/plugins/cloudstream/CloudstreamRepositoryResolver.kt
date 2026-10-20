@@ -173,7 +173,11 @@ object CloudstreamRepositoryResolver {
             PluginManifestScraper(
                 id = plugin.internalName.ifBlank { plugin.name }.replace(" ", ""),
                 name = plugin.name,
-                description = plugin.description ?: "CloudStream Provider • ${plugin.authors.joinToString(", ").ifBlank { "Community" }}",
+                description = when {
+                    types.any { it.equals("NSFW", ignoreCase = true) } ->
+                        "NSFW provider • ${plugin.description ?: plugin.authors.joinToString(", ").ifBlank { "Community" }}"
+                    else -> plugin.description ?: "CloudStream Provider • ${plugin.authors.joinToString(", ").ifBlank { "Community" }}"
+                },
                 version = plugin.version.toString(),
                 filename = plugin.url, // points to .cs3 file
                 supportedTypes = supported.distinct(),

@@ -7,6 +7,9 @@ import com.nuvio.app.features.profiles.ProfileRepository
 import com.nuvio.app.features.tmdb.TmdbService
 import com.nuvio.app.features.plugins.cloudstream.CloudstreamRepositoryResolver
 import com.nuvio.app.features.plugins.cloudstream.CloudstreamScraperRunner
+import com.nuvio.app.features.plugins.cloudstream.CloudstreamExtensionRuntime
+import com.nuvio.app.features.plugins.cloudstream.CloudstreamLoadedItem
+import com.nuvio.app.features.plugins.cloudstream.CloudstreamSearchHit
 import com.nuvio.app.features.plugins.runtime.PluginRuntime
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.query.Order
@@ -366,6 +369,28 @@ actual object PluginRepository {
         }
     }
 
+    actual suspend fun searchCloudstreamProviders(query: String): List<CloudstreamSearchHit> {
+        initialize()
+        val scrapers = (getEnabledScrapersForType("movie") + getEnabledScrapersForType("tv"))
+            .distinctBy { it.id }
+            .filter { it.filename.substringBefore('?').endsWith(".cs3", ignoreCase = true) }
+        return CloudstreamExtensionRuntime.search(query, scrapers)
+    }
+
+    actual suspend fun loadCloudstreamItem(scraperId: String, itemUrl: String): CloudstreamLoadedItem? {
+        initialize()
+        val scraper = _uiState.value.scrapers.firstOrNull { it.id == scraperId } ?: return null
+        if (!scraper.filename.substringBefore('?').endsWith(".cs3", ignoreCase = true)) return null
+        return CloudstreamExtensionRuntime.load(scraper, itemUrl)
+    }
+
+    actual suspend fun loadCloudstreamLinks(scraperId: String, dataUrl: String): List<PluginRuntimeResult> {
+        initialize()
+        val scraper = _uiState.value.scrapers.firstOrNull { it.id == scraperId } ?: return emptyList()
+        if (!scraper.filename.substringBefore('?').endsWith(".cs3", ignoreCase = true)) return emptyList()
+        return CloudstreamExtensionRuntime.loadLinks(scraper, dataUrl)
+    }
+
     actual suspend fun testScraper(scraperId: String): Result<List<PluginRuntimeResult>> {
         initialize()
         val scraper = _uiState.value.scrapers.find { it.id == scraperId }
@@ -407,6 +432,13 @@ actual object PluginRepository {
         episode: Int?,
         respectSearchPause: Boolean,
     ): Result<List<PluginRuntimeResult>> {
+        CloudstreamContentId.parse(tmdbId)?.let { content ->
+            return runCatching {
+                if (content.scraperId != scraper.id) emptyList()
+                else CloudstreamExtensionRuntime.loadLinks(scraper, content.url)
+            }
+        }
+
         val resolvedTmdbId = resolvePluginTmdbId(
             tmdbId = tmdbId,
             mediaType = mediaType,
