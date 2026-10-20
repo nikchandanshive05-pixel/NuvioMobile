@@ -7,6 +7,8 @@ import com.nuvio.app.features.home.HomeCatalogSection
 import com.nuvio.app.features.home.MetaPreview
 import com.nuvio.app.features.home.PosterShape
 import com.nuvio.app.features.plugins.PluginScraper
+import com.nuvio.app.features.plugins.CloudstreamContentId
+import com.nuvio.app.features.plugins.cloudstream.CloudstreamExtensionRuntime
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -72,6 +74,35 @@ object ProviderCatalogResolver {
         scraper: PluginScraper,
     ): ProviderCatalogResult = withContext(Dispatchers.Default) {
         providerCache[scraper.id]?.let { return@withContext it }
+
+        if (scraper.filename.substringBefore('?').endsWith(".cs3", ignoreCase = true)) {
+            val catalog = runCatching { CloudstreamExtensionRuntime.homeCatalog(scraper) }.getOrNull()
+            val sections = catalog?.feeds.orEmpty().mapIndexedNotNull { index, feed ->
+                val items = feed.items.map { hit ->
+                    MetaPreview(
+                        id = CloudstreamContentId.create(scraper.id, hit.url),
+                        type = hit.mediaType,
+                        name = hit.title,
+                        poster = hit.poster,
+                        releaseInfo = hit.year?.toString(),
+                    )
+                }
+                if (items.isEmpty()) null else HomeCatalogSection(
+                    key = "provider_${scraper.id}_$index",
+                    title = feed.title,
+                    subtitle = scraper.name,
+                    addonName = scraper.name,
+                    target = CatalogTarget.Library(contentType = "all", sectionType = "provider"),
+                    items = items,
+                )
+            }
+            val result = ProviderCatalogResult(
+                heroItems = sections.flatMap { it.items }.take(8),
+                sections = sections,
+            )
+            if (sections.isNotEmpty()) providerCache[scraper.id] = result
+            return@withContext result
+        }
 
         val lower = scraper.name.lowercase()
         val isAnime = lower.contains("anime") || lower.contains("koto") || lower.contains("suge")
