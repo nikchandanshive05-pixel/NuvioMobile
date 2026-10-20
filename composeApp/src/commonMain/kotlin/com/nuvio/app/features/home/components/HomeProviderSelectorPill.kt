@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -38,6 +40,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.nuvio.app.features.plugins.PluginScraper
 
 data class CloudStreamProviderChoice(
     val id: String,
@@ -128,7 +131,7 @@ fun HomeProviderSelectorPill(
     onProviderSelected: (String) -> Unit,
     enabledProviderIds: Set<String> = setOf("unified", "cnc_netflix", "cnc_prime", "cnc_hotstar"),
     nsfwEnabled: Boolean = false,
-    installedScrapers: List<com.nuvio.app.features.plugins.PluginScraper> = emptyList(),
+    installedScrapers: List<PluginScraper> = emptyList(),
     modifier: Modifier = Modifier,
 ) {
     var showSheet by remember { mutableStateOf(false) }
@@ -294,12 +297,11 @@ fun HomeProviderSelectorPill(
                     }
                 }
 
-                androidx.compose.foundation.lazy.LazyColumn(
+                LazyColumn(
                     modifier = Modifier.fillMaxWidth().height(360.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
-                    items(displayedProviders.size, key = { displayedProviders[it].id }) { index ->
-                        val provider = displayedProviders[index]
+                    items(displayedProviders, key = { it.id }) { provider ->
                         val isSelected = provider.id == currentProviderId
                         Row(
                             modifier = Modifier

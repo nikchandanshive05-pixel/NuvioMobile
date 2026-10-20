@@ -6,6 +6,7 @@ import com.nuvio.app.features.catalog.CatalogTarget
 import com.nuvio.app.features.home.HomeCatalogSection
 import com.nuvio.app.features.home.MetaPreview
 import com.nuvio.app.features.home.PosterShape
+import com.nuvio.app.features.plugins.PluginScraper
 import com.nuvio.app.features.tmdb.TmdbSettingsRepository
 import com.nuvio.app.features.tmdb.buildTmdbUrl
 import com.nuvio.app.features.tmdb.normalizeTmdbLanguage
@@ -77,7 +78,7 @@ object ProviderCatalogResolver {
      * Resolves curated discovery feeds for an installed CloudStream scraper plugin.
      */
     suspend fun resolveScraperCatalog(
-        scraper: com.nuvio.app.features.plugins.PluginScraper,
+        scraper: PluginScraper,
     ): ProviderCatalogResult = withContext(Dispatchers.Default) {
         providerCache[scraper.id]?.let { return@withContext it }
 
