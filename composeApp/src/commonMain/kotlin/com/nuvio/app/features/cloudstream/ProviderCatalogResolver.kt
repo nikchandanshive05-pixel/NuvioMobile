@@ -158,9 +158,9 @@ object ProviderCatalogResolver {
             val genre2 = config.defaultGenres.getOrNull(1) ?: "Action"
             val genre3 = config.defaultGenres.getOrNull(2) ?: "Sci-Fi"
 
-            val seriesGenre1Deferred = async { fetchCinemeta(type = "series", genre = genre1) }
-            val moviesGenre2Deferred = async { fetchCinemeta(type = "movie", genre = genre2) }
-            val moviesGenre3Deferred = async { fetchCinemeta(type = "movie", genre = genre3) }
+            val seriesGenre1Deferred = async { fetchCinemetaWithFallback("series", genre1) }
+            val moviesGenre2Deferred = async { fetchCinemetaWithFallback("movie", genre2) }
+            val moviesGenre3Deferred = async { fetchCinemetaWithFallback("movie", genre3) }
             val topRatedDeferred = async { fetchCinemeta(type = "movie", genre = null) }
 
             val series1 = seriesGenre1Deferred.await()
@@ -236,7 +236,8 @@ object ProviderCatalogResolver {
             }
 
             val result = ProviderCatalogResult(heroItems = heroItems, sections = sections)
-            providerCache[providerId] = result
+            // Avoid pinning transient request failures as an empty provider catalog.
+            if (result.sections.any { it.items.isNotEmpty() }) providerCache[providerId] = result
             result
         }
     }
@@ -300,6 +301,12 @@ object ProviderCatalogResolver {
             providerCache[cacheKey] = result
             result
         }
+    }
+
+    /** Fall back to the popular catalog when a genre feed returns no results. */
+    private suspend fun fetchCinemetaWithFallback(type: String, genre: String): List<MetaPreview> {
+        val genreItems = fetchCinemeta(type = type, genre = genre)
+        return genreItems.ifEmpty { fetchCinemeta(type = type) }
     }
 
     /**
