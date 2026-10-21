@@ -439,6 +439,8 @@ object ProviderCatalogResolver {
             val responseText = httpGetText(url)
             val parsed = json.decodeFromString<TmdbDiscoverResult>(responseText)
             parsed.results.orEmpty()
+        }.onFailure { error ->
+            log.w { "Failed to fetch discover feed from $endpoint: ${error.message}" }
         }.getOrDefault(emptyList())
 
         val effectiveList = if (items.isEmpty() && query.containsKey("with_watch_providers")) {
@@ -458,30 +460,27 @@ object ProviderCatalogResolver {
         }
 
         return effectiveList.mapNotNull { item ->
-                val title = item.title?.takeIf { it.isNotBlank() }
-                    ?: item.name?.takeIf { it.isNotBlank() }
-                    ?: item.originalTitle?.takeIf { it.isNotBlank() }
-                    ?: item.originalName?.takeIf { it.isNotBlank() }
-                    ?: return@mapNotNull null
+            val title = item.title?.takeIf { it.isNotBlank() }
+                ?: item.name?.takeIf { it.isNotBlank() }
+                ?: item.originalTitle?.takeIf { it.isNotBlank() }
+                ?: item.originalName?.takeIf { it.isNotBlank() }
+                ?: return@mapNotNull null
 
-                MetaPreview(
-                    id = "tmdb:${item.id}",
-                    type = mediaType,
-                    name = title,
-                    poster = imageUrl(item.posterPath, "w500") ?: imageUrl(item.backdropPath, "w780"),
-                    banner = imageUrl(item.backdropPath, "w1280"),
-                    posterShape = PosterShape.Poster,
-                    description = item.overview?.takeIf { it.isNotBlank() },
-                    releaseInfo = (item.releaseDate ?: item.firstAirDate)?.take(4),
-                    rawReleaseDate = item.releaseDate ?: item.firstAirDate,
-                    popularity = item.popularity,
-                    voteCount = item.voteCount,
-                    imdbRating = item.voteAverage?.let { ((it * 10).roundToInt() / 10.0).toString() },
-                )
-            }
-        }.onFailure { error ->
-            log.w { "Failed to fetch discover feed from $endpoint: ${error.message}" }
-        }.getOrDefault(emptyList())
+            MetaPreview(
+                id = "tmdb:${item.id}",
+                type = mediaType,
+                name = title,
+                poster = imageUrl(item.posterPath, "w500") ?: imageUrl(item.backdropPath, "w780"),
+                banner = imageUrl(item.backdropPath, "w1280"),
+                posterShape = PosterShape.Poster,
+                description = item.overview?.takeIf { it.isNotBlank() },
+                releaseInfo = (item.releaseDate ?: item.firstAirDate)?.take(4),
+                rawReleaseDate = item.releaseDate ?: item.firstAirDate,
+                popularity = item.popularity,
+                voteCount = item.voteCount,
+                imdbRating = item.voteAverage?.let { ((it * 10).roundToInt() / 10.0).toString() },
+            )
+        }
     }
 
     private fun imageUrl(path: String?, size: String): String? {

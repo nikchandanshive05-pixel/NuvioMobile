@@ -96,7 +96,7 @@ internal object LocalDebridService {
             val response = httpRequestRaw(
                 method = "GET",
                 url = "https://api.real-debrid.com/rest/1.0/torrents/instantAvailability/$path",
-                headers = listOf("Authorization" to "Bearer $apiKey", "Accept" to "application/json"),
+                headers = mapOf("Authorization" to "Bearer $apiKey", "Accept" to "application/json"),
                 body = "",
             )
             if (response.status !in 200..299) {
