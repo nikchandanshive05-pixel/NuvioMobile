@@ -72,30 +72,6 @@ val defaultCloudstreamProviders = listOf(
         flag = "🌐",
         category = "All",
     ),
-    CloudStreamProviderChoice(
-        id = "cnc_netflix",
-        name = "CNC Verse - Netflix",
-        subtitle = "Trending Netflix Releases & Originals",
-        icon = Icons.Default.PlayArrow,
-        flag = "🇮🇳",
-        category = "All",
-    ),
-    CloudStreamProviderChoice(
-        id = "cnc_prime",
-        name = "CNC Verse - Prime Video",
-        subtitle = "Amazon Prime Video Catalog & Top 10",
-        icon = Icons.Default.PlayArrow,
-        flag = "🇮🇳",
-        category = "All",
-    ),
-    CloudStreamProviderChoice(
-        id = "cnc_hotstar",
-        name = "CNC Verse - HotStar",
-        subtitle = "Disney+ HotStar & Regional Movies",
-        icon = Icons.Default.PlayArrow,
-        flag = "🇮🇳",
-        category = "All",
-    ),
 )
 
 private fun resolveScraperFlag(scraper: com.nuvio.app.features.plugins.PluginScraper): String {
@@ -172,11 +148,6 @@ fun HomeProviderSelectorPill(
                     )
                 )
             }
-        }
-
-        // 3. Built-in Adult provider if NSFW is enabled
-        if (nsfwEnabled) {
-            base.add(adultCloudstreamProvider)
         }
 
         base
