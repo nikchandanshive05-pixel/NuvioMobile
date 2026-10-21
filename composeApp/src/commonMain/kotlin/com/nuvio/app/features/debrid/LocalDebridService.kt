@@ -3,6 +3,10 @@ package com.nuvio.app.features.debrid
 import com.nuvio.app.features.addons.httpRequestRaw
 
 import kotlinx.coroutines.CancellationException
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.longOrNull
 
@@ -98,12 +102,12 @@ internal object LocalDebridService {
             if (response.status !in 200..299) {
                 null
             } else {
-                val element = kotlinx.serialization.json.Json.parseToJsonElement(response.body)
-                val obj = element as? kotlinx.serialization.json.JsonObject ?: return null
+                val element = DebridApiJson.json.parseToJsonElement(response.body)
+                val obj = element as? JsonObject ?: return null
                 val result = mutableMapOf<String, LocalDebridCachedItem>()
                 for ((hash, valElem) in obj) {
-                    val hostObj = valElem as? kotlinx.serialization.json.JsonObject ?: continue
-                    val rdVariant = hostObj["rd"] as? kotlinx.serialization.json.JsonArray
+                    val hostObj = valElem as? JsonObject ?: continue
+                    val rdVariant = hostObj["rd"] as? JsonArray
                     if (rdVariant != null && rdVariant.isNotEmpty()) {
                         result[hash.lowercase()] = LocalDebridCachedItem(name = null, size = null)
                     }
@@ -117,7 +121,7 @@ internal object LocalDebridService {
 }
 
 
-private fun kotlinx.serialization.json.JsonElement?.asLongOrNull(): Long? {
+private fun JsonElement?.asLongOrNull(): Long? {
     val primitive = this as? JsonPrimitive ?: return null
     return primitive.longOrNull ?: primitive.content.toLongOrNull()
 }
