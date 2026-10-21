@@ -429,11 +429,30 @@ object SearchRepository {
         )
     }
 
+    private val querySynonyms = mapOf(
+        "lotr" to "The Lord of the Rings",
+        "got" to "Game of Thrones",
+        "hotd" to "House of the Dragon",
+        "tbbt" to "The Big Bang Theory",
+        "himym" to "How I Met Your Mother",
+        "bcs" to "Better Call Saul",
+        "bb" to "Breaking Bad",
+        "aot" to "Attack on Titan",
+        "mha" to "My Hero Academia",
+        "ff" to "Fast and Furious",
+    )
+
+    private fun resolveSearchQuery(query: String): String {
+        val lower = query.trim().lowercase()
+        return querySynonyms[lower] ?: query.trim()
+    }
+
     private fun buildSearchRequests(
         addons: List<ManagedAddon>,
         query: String,
-    ): List<SearchCatalogRequest> =
-        addons.mapNotNull { addon ->
+    ): List<SearchCatalogRequest> {
+        val effectiveQuery = resolveSearchQuery(query)
+        return addons.mapNotNull { addon ->
             val manifest = addon.manifest ?: return@mapNotNull null
             addon to manifest
         }.flatMap { (addon, manifest) ->
@@ -445,11 +464,12 @@ object SearchRepository {
                         catalogId = catalog.id,
                         catalogName = catalog.name,
                         type = catalog.type,
-                        query = query,
+                        query = effectiveQuery,
                         supportsPagination = catalog.supportsPagination(),
                     )
                 }
         }
+    }
 
     private fun buildDiscoverSources(addons: List<ManagedAddon>): List<DiscoverCatalogOption> =
         addons.mapNotNull { addon ->

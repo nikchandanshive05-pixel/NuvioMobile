@@ -59,7 +59,7 @@ internal fun officialConfiguration() = ServerConfiguration(
     capabilities = ServerCapabilities(
         emailPasswordAuth = true,
         tvLogin = true,
-        watchParty = true,
+        watchParty = false,
     ),
     isCustom = false,
     fallbackBackendUrl = SupabaseConfig.FALLBACK_URL.trim().trimEnd('/').takeIf { it.isNotBlank() },

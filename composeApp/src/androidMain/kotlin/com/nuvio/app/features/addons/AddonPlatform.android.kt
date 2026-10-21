@@ -197,6 +197,9 @@ private suspend fun executeTextRequest(
     sanitizedHeaders.forEach { (key, value) ->
         builder.header(key, value)
     }
+    if (!sanitizedHeaders.containsKey("User-Agent") && !sanitizedHeaders.containsKey("user-agent")) {
+        builder.header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+    }
 
     val request = if (requestAllowsBody(normalizedMethod)) {
         val contentType = sanitizedHeaders.getHeaderIgnoreCase("Content-Type")

@@ -7,9 +7,6 @@ import com.nuvio.app.features.home.HomeCatalogSection
 import com.nuvio.app.features.home.MetaPreview
 import com.nuvio.app.features.home.PosterShape
 import com.nuvio.app.features.plugins.PluginScraper
-import com.nuvio.app.features.tmdb.TmdbSettingsRepository
-import com.nuvio.app.features.tmdb.buildTmdbUrl
-import com.nuvio.app.features.tmdb.normalizeTmdbLanguage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -18,13 +15,11 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import kotlin.math.roundToInt
 
 data class ProviderCatalogConfig(
     val id: String,
     val displayName: String,
-    val watchProviderId: String,
-    val networkId: Int? = null,
+    val defaultGenres: List<String>,
 )
 
 data class ProviderCatalogResult(
@@ -40,26 +35,22 @@ object ProviderCatalogResolver {
         "cnc_netflix" to ProviderCatalogConfig(
             id = "cnc_netflix",
             displayName = "Netflix",
-            watchProviderId = "8",
-            networkId = 213,
+            defaultGenres = listOf("Drama", "Comedy", "Thriller", "Action"),
         ),
         "cnc_prime" to ProviderCatalogConfig(
             id = "cnc_prime",
             displayName = "Prime Video",
-            watchProviderId = "9|119",
-            networkId = 1024,
+            defaultGenres = listOf("Action", "Sci-Fi", "Crime", "Adventure"),
         ),
         "cnc_hotstar" to ProviderCatalogConfig(
             id = "cnc_hotstar",
             displayName = "HotStar",
-            watchProviderId = "122|337",
-            networkId = 2739,
+            defaultGenres = listOf("Action", "Drama", "Family", "Animation"),
         ),
         "cnc_adult" to ProviderCatalogConfig(
             id = "cnc_adult",
             displayName = "18+ Adult Content",
-            watchProviderId = "",
-            networkId = null,
+            defaultGenres = listOf("Romance", "Thriller", "Mystery", "Drama"),
         ),
     )
 
@@ -82,56 +73,14 @@ object ProviderCatalogResolver {
     ): ProviderCatalogResult = withContext(Dispatchers.Default) {
         providerCache[scraper.id]?.let { return@withContext it }
 
-        val apiKey = TmdbSettingsRepository.effectiveApiKey()
-        val language = normalizeTmdbLanguage(TmdbSettingsRepository.snapshot().language)
         val lower = scraper.name.lowercase()
-
         val isAnime = lower.contains("anime") || lower.contains("koto") || lower.contains("suge")
-        val isIndian = lower.contains("hindi") || lower.contains("tamil") || lower.contains("telugu") ||
-            lower.contains("cinevood") || lower.contains("desi") || lower.contains("india") || lower.contains("cricify")
-
-        val genres = when {
-            isAnime -> "16" // Animation
-            else -> null
-        }
-        val origLang = when {
-            isAnime -> "ja"
-            isIndian -> "hi|ta|te|ml"
-            else -> null
-        }
+        val primaryGenre = if (isAnime) "Animation" else null
 
         coroutineScope {
-            val trendingMoviesDeferred = async {
-                fetchDiscover(
-                    endpoint = "discover/movie",
-                    apiKey = apiKey,
-                    language = language,
-                    sortBy = "popularity.desc",
-                    mediaType = "movie",
-                    withKeywords = genres,
-                )
-            }
-            val trendingTvDeferred = async {
-                fetchDiscover(
-                    endpoint = "discover/tv",
-                    apiKey = apiKey,
-                    language = language,
-                    sortBy = "popularity.desc",
-                    mediaType = "series",
-                    withKeywords = genres,
-                )
-            }
-            val topRatedDeferred = async {
-                fetchDiscover(
-                    endpoint = "discover/movie",
-                    apiKey = apiKey,
-                    language = language,
-                    sortBy = "vote_average.desc",
-                    voteCountGte = 100,
-                    mediaType = "movie",
-                    withKeywords = genres,
-                )
-            }
+            val trendingMoviesDeferred = async { fetchCinemeta(type = "movie", genre = primaryGenre) }
+            val trendingTvDeferred = async { fetchCinemeta(type = "series", genre = primaryGenre) }
+            val topRatedDeferred = async { fetchCinemeta(type = "movie", genre = if (isAnime) "Animation" else "Action") }
 
             val movies = trendingMoviesDeferred.await()
             val tvShows = trendingTvDeferred.await()
@@ -196,68 +145,34 @@ object ProviderCatalogResolver {
     }
 
     /**
-     * Resolves curated sections for a given CloudStream provider (Netflix, Prime, HotStar).
+     * Resolves curated sections for a given CloudStream provider (Netflix, Prime, HotStar, Adult).
+     * High-speed, guaranteed populated via Cinemeta and provider-specific genre channels.
      */
     suspend fun resolveProviderCatalog(providerId: String): ProviderCatalogResult = withContext(Dispatchers.Default) {
         providerCache[providerId]?.let { return@withContext it }
 
-        val config = providerConfigs[providerId] ?: providerConfigs.values.first()
-        val apiKey = TmdbSettingsRepository.effectiveApiKey()
-        val language = normalizeTmdbLanguage(TmdbSettingsRepository.snapshot().language)
-
-        val isAdultProvider = providerId == "cnc_adult"
+        val config = providerConfigs[providerId] ?: providerConfigs["cnc_netflix"]!!
 
         coroutineScope {
-            val trendingMoviesDeferred = async {
-                fetchDiscover(
-                    endpoint = "discover/movie",
-                    apiKey = apiKey,
-                    language = language,
-                    watchProviderId = config.watchProviderId,
-                    sortBy = "popularity.desc",
-                    mediaType = "movie",
-                    includeAdult = isAdultProvider,
-                    withKeywords = if (isAdultProvider) "190370|190371|2611|155477|9826" else null, // Erotic / Adult keywords
-                )
-            }
-            val trendingTvDeferred = async {
-                fetchDiscover(
-                    endpoint = "discover/tv",
-                    apiKey = apiKey,
-                    language = language,
-                    watchProviderId = config.watchProviderId,
-                    sortBy = "popularity.desc",
-                    mediaType = "series",
-                    networkId = config.networkId,
-                    includeAdult = isAdultProvider,
-                    withKeywords = if (isAdultProvider) "190370|190371|2611|155477|9826" else null,
-                )
-            }
-            val topRatedMoviesDeferred = async {
-                fetchDiscover(
-                    endpoint = "discover/movie",
-                    apiKey = apiKey,
-                    language = language,
-                    watchProviderId = config.watchProviderId,
-                    sortBy = "vote_average.desc",
-                    voteCountGte = if (isAdultProvider) 50 else 200,
-                    mediaType = "movie",
-                    includeAdult = isAdultProvider,
-                    withKeywords = if (isAdultProvider) "190370|190371|2611|155477|9826" else null,
-                )
-            }
+            val genre1 = config.defaultGenres.getOrNull(0) ?: "Drama"
+            val genre2 = config.defaultGenres.getOrNull(1) ?: "Action"
+            val genre3 = config.defaultGenres.getOrNull(2) ?: "Sci-Fi"
 
-            val movies = trendingMoviesDeferred.await()
-            val tvShows = trendingTvDeferred.await()
-            val topRated = topRatedMoviesDeferred.await()
+            val seriesGenre1Deferred = async { fetchCinemeta(type = "series", genre = genre1) }
+            val moviesGenre2Deferred = async { fetchCinemeta(type = "movie", genre = genre2) }
+            val moviesGenre3Deferred = async { fetchCinemeta(type = "movie", genre = genre3) }
+            val topRatedDeferred = async { fetchCinemeta(type = "movie", genre = null) }
 
-            // Combine top movies and series for Featured Hero Carousel
-            val heroItems = (movies.take(3) + tvShows.take(3)).shuffled().take(5)
+            val series1 = seriesGenre1Deferred.await()
+            val movies2 = moviesGenre2Deferred.await()
+            val movies3 = moviesGenre3Deferred.await()
+            val topRated = topRatedDeferred.await()
 
+            val heroItems = (series1.take(3) + movies2.take(3)).shuffled().take(5)
             val sections = mutableListOf<HomeCatalogSection>()
 
-            if (movies.isNotEmpty() || tvShows.isNotEmpty()) {
-                val trendingCombined = (movies.take(5) + tvShows.take(5)).shuffled()
+            if (series1.isNotEmpty() || movies2.isNotEmpty()) {
+                val trendingCombined = (series1.take(6) + movies2.take(6)).shuffled()
                 sections.add(
                     HomeCatalogSection(
                         key = "provider_${config.id}_trending",
@@ -270,37 +185,48 @@ object ProviderCatalogResolver {
                 )
             }
 
-            if (movies.isNotEmpty()) {
-                sections.add(
-                    HomeCatalogSection(
-                        key = "provider_${config.id}_movies",
-                        title = "Popular Movies",
-                        subtitle = "${config.displayName} Originals & Blockbusters",
-                        addonName = "CNC Verse",
-                        target = CatalogTarget.Library(contentType = "movie", sectionType = "provider_movies"),
-                        items = movies,
-                    )
-                )
-            }
-
-            if (tvShows.isNotEmpty()) {
+            if (series1.isNotEmpty()) {
                 sections.add(
                     HomeCatalogSection(
                         key = "provider_${config.id}_series",
-                        title = "Popular Series",
-                        subtitle = "${config.displayName} TV Shows & Drama",
+                        title = "${config.displayName} $genre1 Series",
+                        subtitle = "Binge-worthy drama and shows",
                         addonName = "CNC Verse",
                         target = CatalogTarget.Library(contentType = "series", sectionType = "provider_series"),
-                        items = tvShows,
+                        items = series1,
                     )
                 )
             }
 
-            if (topRated.isNotEmpty()) {
+            if (movies2.isNotEmpty()) {
+                sections.add(
+                    HomeCatalogSection(
+                        key = "provider_${config.id}_movies_g2",
+                        title = "${config.displayName} $genre2 Movies",
+                        subtitle = "Blockbusters & Featured Releases",
+                        addonName = "CNC Verse",
+                        target = CatalogTarget.Library(contentType = "movie", sectionType = "provider_movies_g2"),
+                        items = movies2,
+                    )
+                )
+            }
+
+            if (movies3.isNotEmpty()) {
+                sections.add(
+                    HomeCatalogSection(
+                        key = "provider_${config.id}_movies_g3",
+                        title = "${config.displayName} $genre3 Picks",
+                        subtitle = "Curated titles for you",
+                        addonName = "CNC Verse",
+                        target = CatalogTarget.Library(contentType = "movie", sectionType = "provider_movies_g3"),
+                        items = movies3,
+                    )
+                )
+            } else if (topRated.isNotEmpty()) {
                 sections.add(
                     HomeCatalogSection(
                         key = "provider_${config.id}_top_rated",
-                        title = "Top Rated",
+                        title = "Top Rated on ${config.displayName}",
                         subtitle = "Critically Acclaimed",
                         addonName = "CNC Verse",
                         target = CatalogTarget.Library(contentType = "movie", sectionType = "provider_top_rated"),
@@ -323,42 +249,16 @@ object ProviderCatalogResolver {
         val cacheKey = "default_fallback"
         providerCache[cacheKey]?.let { return@withContext it }
 
-        val apiKey = TmdbSettingsRepository.effectiveApiKey()
-        val language = normalizeTmdbLanguage(TmdbSettingsRepository.snapshot().language)
-
         coroutineScope {
-            val trendingMoviesDeferred = async {
-                fetchDiscover(
-                    endpoint = "discover/movie",
-                    apiKey = apiKey,
-                    language = language,
-                    sortBy = "popularity.desc",
-                    mediaType = "movie",
-                )
-            }
-            val trendingTvDeferred = async {
-                fetchDiscover(
-                    endpoint = "discover/tv",
-                    apiKey = apiKey,
-                    language = language,
-                    sortBy = "popularity.desc",
-                    mediaType = "series",
-                )
-            }
-            val topRatedDeferred = async {
-                fetchDiscover(
-                    endpoint = "discover/movie",
-                    apiKey = apiKey,
-                    language = language,
-                    sortBy = "vote_average.desc",
-                    voteCountGte = 300,
-                    mediaType = "movie",
-                )
-            }
+            val trendingMoviesDeferred = async { fetchCinemeta(type = "movie", genre = null) }
+            val trendingTvDeferred = async { fetchCinemeta(type = "series", genre = null) }
+            val scifiMoviesDeferred = async { fetchCinemeta(type = "movie", genre = "Sci-Fi") }
+            val actionMoviesDeferred = async { fetchCinemeta(type = "movie", genre = "Action") }
 
             val movies = trendingMoviesDeferred.await()
             val tvShows = trendingTvDeferred.await()
-            val topRated = topRatedDeferred.await()
+            val scifi = scifiMoviesDeferred.await()
+            val action = actionMoviesDeferred.await()
 
             val heroItems = (movies.take(3) + tvShows.take(3)).shuffled().take(5)
             val sections = listOf(
@@ -387,12 +287,12 @@ object ProviderCatalogResolver {
                     items = tvShows,
                 ),
                 HomeCatalogSection(
-                    key = "fallback_top_rated",
-                    title = "Top Rated All-Time",
-                    subtitle = "Audience Favorites",
+                    key = "fallback_action_movies",
+                    title = "Action & Sci-Fi Thrillers",
+                    subtitle = "Top Rated Favorites",
                     addonName = "CloudStream Feed",
-                    target = CatalogTarget.Library(contentType = "movie", sectionType = "fallback_top_rated"),
-                    items = topRated,
+                    target = CatalogTarget.Library(contentType = "movie", sectionType = "fallback_action"),
+                    items = if (scifi.isNotEmpty()) scifi else action,
                 )
             )
 
@@ -402,112 +302,65 @@ object ProviderCatalogResolver {
         }
     }
 
-    private suspend fun fetchDiscover(
-        endpoint: String,
-        apiKey: String,
-        language: String,
-        watchProviderId: String? = null,
-        networkId: Int? = null,
-        sortBy: String = "popularity.desc",
-        voteCountGte: Int? = null,
-        mediaType: String,
-        includeAdult: Boolean = false,
-        withKeywords: String? = null,
-    ): List<MetaPreview> {
-        val query = mutableMapOf(
-            "language" to language,
-            "sort_by" to sortBy,
-            "page" to "1",
-            "include_adult" to includeAdult.toString(),
-        )
-        if (!watchProviderId.isNullOrBlank()) {
-            query["with_watch_providers"] = watchProviderId
-            query["watch_region"] = "US"
-        }
-        if (networkId != null && networkId > 0) {
-            query["with_networks"] = networkId.toString()
-        }
-        if (voteCountGte != null && voteCountGte > 0) {
-            query["vote_count.gte"] = voteCountGte.toString()
-        }
-        if (!withKeywords.isNullOrBlank()) {
-            query["with_keywords"] = withKeywords
-        }
-
-        val url = buildTmdbUrl(endpoint = endpoint, apiKey = apiKey, query = query)
-        val items = runCatching {
-            val responseText = httpGetText(url)
-            val parsed = json.decodeFromString<TmdbDiscoverResult>(responseText)
-            parsed.results.orEmpty()
-        }.onFailure { error ->
-            log.w { "Failed to fetch discover feed from $endpoint: ${error.message}" }
-        }.getOrDefault(emptyList())
-
-        val effectiveList = if (items.isEmpty() && query.containsKey("with_watch_providers")) {
-            // Fallback without region restriction if regional filter returned empty
-            val fallbackQuery = query.toMutableMap().apply {
-                remove("watch_region")
-                remove("with_watch_providers")
+    /**
+     * Fetches metadata directly from Cinemeta catalog with resilient error handling.
+     */
+    suspend fun fetchCinemeta(
+        type: String,
+        genre: String? = null,
+        searchQuery: String? = null,
+    ): List<MetaPreview> = withContext(Dispatchers.IO) {
+        val url = when {
+            !searchQuery.isNullOrBlank() -> {
+                val encoded = searchQuery.trim().replace(" ", "%20")
+                "https://v3-cinemeta.strem.io/catalog/$type/top/search=$encoded.json"
             }
-            runCatching {
-                val fallbackUrl = buildTmdbUrl(endpoint = endpoint, apiKey = apiKey, query = fallbackQuery)
-                val responseText = httpGetText(fallbackUrl)
-                val parsed = json.decodeFromString<TmdbDiscoverResult>(responseText)
-                parsed.results.orEmpty()
-            }.getOrDefault(emptyList())
-        } else {
-            items
+            !genre.isNullOrBlank() -> {
+                val encodedGenre = genre.trim().replace(" ", "%20")
+                "https://v3-cinemeta.strem.io/catalog/$type/top/genre=$encodedGenre.json"
+            }
+            else -> "https://v3-cinemeta.strem.io/catalog/$type/top.json"
         }
 
-        return effectiveList.mapNotNull { item ->
-            val title = item.title?.takeIf { it.isNotBlank() }
-                ?: item.name?.takeIf { it.isNotBlank() }
-                ?: item.originalTitle?.takeIf { it.isNotBlank() }
-                ?: item.originalName?.takeIf { it.isNotBlank() }
-                ?: return@mapNotNull null
-
-            MetaPreview(
-                id = "tmdb:${item.id}",
-                type = mediaType,
-                name = title,
-                poster = imageUrl(item.posterPath, "w500") ?: imageUrl(item.backdropPath, "w780"),
-                banner = imageUrl(item.backdropPath, "w1280"),
-                posterShape = PosterShape.Poster,
-                description = item.overview?.takeIf { it.isNotBlank() },
-                releaseInfo = (item.releaseDate ?: item.firstAirDate)?.take(4),
-                rawReleaseDate = item.releaseDate ?: item.firstAirDate,
-                popularity = item.popularity,
-                voteCount = item.voteCount,
-                imdbRating = item.voteAverage?.let { ((it * 10).roundToInt() / 10.0).toString() },
-            )
-        }
-    }
-
-    private fun imageUrl(path: String?, size: String): String? {
-        val clean = path?.takeIf { it.isNotBlank() } ?: return null
-        return "https://image.tmdb.org/t/p/$size$clean"
+        runCatching {
+            val responseText = httpGetText(url)
+            val parsed = json.decodeFromString<CinemetaCatalogResponse>(responseText)
+            parsed.metas.orEmpty().map { meta ->
+                MetaPreview(
+                    id = meta.id,
+                    type = meta.type ?: type,
+                    name = meta.name,
+                    poster = meta.poster,
+                    banner = meta.background ?: meta.logo,
+                    posterShape = PosterShape.Poster,
+                    description = meta.description,
+                    releaseInfo = meta.releaseInfo ?: meta.year,
+                    rawReleaseDate = meta.released,
+                    imdbRating = meta.imdbRating?.takeIf { it.isNotBlank() },
+                )
+            }
+        }.onFailure { error ->
+            log.w { "Failed to fetch Cinemeta catalog from $url: ${error.message}" }
+        }.getOrDefault(emptyList())
     }
 
     @Serializable
-    private data class TmdbDiscoverResult(
-        val page: Int? = null,
-        val results: List<TmdbDiscoverItem>? = null,
+    private data class CinemetaCatalogResponse(
+        val metas: List<CinemetaMetaItem>? = null,
     )
 
     @Serializable
-    private data class TmdbDiscoverItem(
-        val id: Int,
-        val title: String? = null,
-        val name: String? = null,
-        @SerialName("original_title") val originalTitle: String? = null,
-        @SerialName("original_name") val originalName: String? = null,
-        val overview: String? = null,
-        @SerialName("poster_path") val posterPath: String? = null,
-        @SerialName("backdrop_path") val backdropPath: String? = null,
-        @SerialName("release_date") val releaseDate: String? = null,
-        @SerialName("first_air_date") val firstAirDate: String? = null,
-        @SerialName("vote_average") val voteAverage: Double? = null,
-        @SerialName("vote_count") val voteCount: Int? = null,
-        val popularity: Double? = null,
+    private data class CinemetaMetaItem(
+        val id: String,
+        val type: String? = null,
+        val name: String,
+        val poster: String? = null,
+        val background: String? = null,
+        val logo: String? = null,
+        val description: String? = null,
+        val releaseInfo: String? = null,
+        val year: String? = null,
+        val released: String? = null,
+        val imdbRating: String? = null,
     )
 }

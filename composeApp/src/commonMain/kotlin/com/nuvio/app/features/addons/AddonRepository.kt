@@ -67,10 +67,13 @@ object AddonRepository {
         currentProfileId = effectiveProfileId
         log.d { "initialize() — loading local addons for profile $currentProfileId" }
 
-        val storedUrls = dedupeManifestUrls(AddonStorage.loadInstalledAddonUrls(currentProfileId))
+        var storedUrls = dedupeManifestUrls(AddonStorage.loadInstalledAddonUrls(currentProfileId))
+        if (storedUrls.isEmpty()) {
+            storedUrls = listOf("https://v3-cinemeta.strem.io/manifest.json")
+            AddonStorage.saveInstalledAddonUrls(currentProfileId, storedUrls)
+        }
         val enabledByUrl = loadLocalEnabledStates()
         log.d { "initialize() — local addon count: ${storedUrls.size}" }
-        if (storedUrls.isEmpty()) return
 
         val existingByUrl = _uiState.value.addons.associateBy(ManagedAddon::manifestUrl)
         _uiState.value = AddonsUiState(
