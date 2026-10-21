@@ -77,7 +77,45 @@ internal object LocalDebridService {
             if (error is CancellationException) throw error
             null
         }
+
+    private suspend fun checkRealDebridCached(
+        apiKey: String,
+        hashes: List<String>,
+    ): Map<String, LocalDebridCachedItem>? =
+        try {
+            val normalizedHashes = hashes
+                .map { it.trim().lowercase() }
+                .filter { it.isNotBlank() }
+                .distinct()
+            if (normalizedHashes.isEmpty()) return emptyMap()
+            val path = normalizedHashes.joinToString("/")
+            val response = httpRequestRaw(
+                method = "GET",
+                url = "https://api.real-debrid.com/rest/1.0/torrents/instantAvailability/$path",
+                headers = listOf("Authorization" to "Bearer $apiKey", "Accept" to "application/json"),
+                body = "",
+            )
+            if (response.status !in 200..299) {
+                null
+            } else {
+                val element = kotlinx.serialization.json.Json.parseToJsonElement(response.body)
+                val obj = element as? kotlinx.serialization.json.JsonObject ?: return null
+                val result = mutableMapOf<String, LocalDebridCachedItem>()
+                for ((hash, valElem) in obj) {
+                    val hostObj = valElem as? kotlinx.serialization.json.JsonObject ?: continue
+                    val rdVariant = hostObj["rd"] as? kotlinx.serialization.json.JsonArray
+                    if (rdVariant != null && rdVariant.isNotEmpty()) {
+                        result[hash.lowercase()] = LocalDebridCachedItem(name = null, size = null)
+                    }
+                }
+                result
+            }
+        } catch (error: Exception) {
+            if (error is CancellationException) throw error
+            null
+        }
 }
+
 
 private fun kotlinx.serialization.json.JsonElement?.asLongOrNull(): Long? {
     val primitive = this as? JsonPrimitive ?: return null
