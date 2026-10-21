@@ -902,6 +902,9 @@ fun HomeScreen(
             }
         }
 
+        providerCatalogResult = null
+        isProviderCatalogLoading = selectedProviderId != "unified"
+
         val matchingInstalledScraper = pluginsUiState.scrapers.find { it.id == selectedProviderId }
         val isProviderAvailable = when {
             selectedProviderId == "unified" -> true
@@ -941,11 +944,13 @@ fun HomeScreen(
         }
     }
 
-    val activeHeroItems = remember(providerCatalogResult, homeUiState.heroItems) {
-        providerCatalogResult?.heroItems ?: homeUiState.heroItems
+    val activeHeroItems = remember(selectedProviderId, providerCatalogResult, homeUiState.heroItems) {
+        if (selectedProviderId == "unified") homeUiState.heroItems
+        else providerCatalogResult?.heroItems.orEmpty()
     }
-    val activeSections = remember(providerCatalogResult, homeUiState.sections) {
-        providerCatalogResult?.sections ?: homeUiState.sections
+    val activeSections = remember(selectedProviderId, providerCatalogResult, homeUiState.sections) {
+        if (selectedProviderId == "unified") homeUiState.sections
+        else providerCatalogResult?.sections.orEmpty()
     }
 
     val visibleCollections = remember(collections) {
