@@ -1,5 +1,7 @@
 package com.nuvio.app.features.debrid
 
+import com.nuvio.app.features.addons.httpRequestRaw
+
 import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.longOrNull
@@ -17,6 +19,7 @@ internal object LocalDebridService {
         when (account.provider.id) {
             DebridProviders.TORBOX_ID -> checkTorboxCached(account.apiKey, hashes)
             DebridProviders.PREMIUMIZE_ID -> checkPremiumizeCached(account.apiKey, hashes)
+            DebridProviders.REAL_DEBRID_ID -> checkRealDebridCached(account.apiKey, hashes)
             else -> null
         }
 

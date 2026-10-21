@@ -333,6 +333,11 @@ internal fun LazyListScope.debridSettingsContent(
                     currentValue = settings.apiKeyFor(provider.id),
                     onConnected = { token -> DebridSettingsRepository.setProviderApiKey(provider.id, token) },
                     onDisconnect = { DebridSettingsRepository.setProviderApiKey(provider.id, "") },
+                    onEnterApiKey = {
+                        val pid = provider.id
+                        activeDeviceAuthProviderId = null
+                        activeApiKeyProviderId = pid
+                    },
                     onDismiss = { activeDeviceAuthProviderId = null },
                 )
             }
@@ -1303,6 +1308,7 @@ private fun DebridDeviceAuthDialog(
     currentValue: String,
     onConnected: (String) -> Unit,
     onDisconnect: () -> Unit,
+    onEnterApiKey: (() -> Unit)? = null,
     onDismiss: () -> Unit,
 ) {
     val uriHandler = LocalUriHandler.current
@@ -1502,6 +1508,15 @@ private fun DebridDeviceAuthDialog(
             }
         }
         DialogButtons {
+            if (onEnterApiKey != null) {
+                DialogButton(
+                    text = "Enter API Key",
+                    onClick = {
+                        onDismiss()
+                        onEnterApiKey()
+                    },
+                )
+            }
             DialogButton(
                 text = stringResource(Res.string.action_cancel),
                 onClick = onDismiss,

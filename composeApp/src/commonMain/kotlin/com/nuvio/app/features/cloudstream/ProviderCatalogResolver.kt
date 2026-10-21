@@ -435,10 +435,29 @@ object ProviderCatalogResolver {
         }
 
         val url = buildTmdbUrl(endpoint = endpoint, apiKey = apiKey, query = query)
-        return runCatching {
+        val items = runCatching {
             val responseText = httpGetText(url)
             val parsed = json.decodeFromString<TmdbDiscoverResult>(responseText)
-            parsed.results.orEmpty().mapNotNull { item ->
+            parsed.results.orEmpty()
+        }.getOrDefault(emptyList())
+
+        val effectiveList = if (items.isEmpty() && query.containsKey("with_watch_providers")) {
+            // Fallback without region restriction if regional filter returned empty
+            val fallbackQuery = query.toMutableMap().apply {
+                remove("watch_region")
+                remove("with_watch_providers")
+            }
+            runCatching {
+                val fallbackUrl = buildTmdbUrl(endpoint = endpoint, apiKey = apiKey, query = fallbackQuery)
+                val responseText = httpGetText(fallbackUrl)
+                val parsed = json.decodeFromString<TmdbDiscoverResult>(responseText)
+                parsed.results.orEmpty()
+            }.getOrDefault(emptyList())
+        } else {
+            items
+        }
+
+        return effectiveList.mapNotNull { item ->
                 val title = item.title?.takeIf { it.isNotBlank() }
                     ?: item.name?.takeIf { it.isNotBlank() }
                     ?: item.originalTitle?.takeIf { it.isNotBlank() }

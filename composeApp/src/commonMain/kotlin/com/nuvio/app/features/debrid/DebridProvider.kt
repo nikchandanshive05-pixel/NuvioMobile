@@ -61,8 +61,13 @@ object DebridProviders {
         id = REAL_DEBRID_ID,
         displayName = "Real-Debrid",
         shortName = "RD",
-        visibleInUi = false,
-        capabilities = setOf(DebridProviderCapability.ClientResolve),
+        visibleInUi = true,
+        authMethod = DebridProviderAuthMethod.ApiKey,
+        capabilities = setOf(
+            DebridProviderCapability.ClientResolve,
+            DebridProviderCapability.LocalTorrentCacheCheck,
+            DebridProviderCapability.LocalTorrentResolve,
+        ),
     )
 
     private val registered = listOf(Torbox, Premiumize, RealDebrid)
