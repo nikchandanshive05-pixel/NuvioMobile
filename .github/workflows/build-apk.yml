@@ -44,7 +44,7 @@ jobs:
       - name: Build Full Android APK
         run: |
           set -o pipefail
-          ./gradlew :androidApp:assembleFullDebug -Pnuvio.android.distribution=full -Pnuvio.ios.distribution=appstore --stacktrace 2>&1 | tee gradle_build.log || (echo "=== GRADLE FAILED - COMPILATION ERROR ===" && tail -n 120 gradle_build.log && exit 1)
+          ./gradlew :androidApp:assembleFullDebug -Pnuvio.android.distribution=full -Pnuvio.ios.distribution=appstore --stacktrace --no-daemon 2>&1 | tee gradle_build.log || (echo "=== GRADLE COMPILATION FAILURE LOG ===" && grep -B 2 -A 10 "e: " gradle_build.log || tail -n 150 gradle_build.log; exit 1)
 
       - name: Upload Build Log on Failure
         if: failure()
