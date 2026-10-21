@@ -91,7 +91,10 @@ actual object CloudstreamExtensionRuntime {
     actual suspend fun homeCatalog(scraper: PluginScraper): CloudstreamHomeCatalog? =
         withContext(Dispatchers.IO) {
             val provider = providerFor(scraper) ?: return@withContext null
-            val pages = property(provider, "mainPage") as? Iterable<*> ?: return@withContext null
+            val pages = property(provider, "mainPage") as? Iterable<*>
+            if (pages == null || pages.none()) {
+                return@withContext searchHomeFeed(provider, scraper)
+            }
             val requestClass = Class.forName("com.lagradost.cloudstream3.MainPageRequest", true, appContext?.classLoader)
             val constructor = requestClass.getConstructor(String::class.java, String::class.java, java.lang.Boolean.TYPE)
             val getMainPage = provider.javaClass.methods.firstOrNull {
@@ -131,8 +134,37 @@ actual object CloudstreamExtensionRuntime {
                     CloudstreamHomeFeed(title, horizontal, items)
                 }.getOrNull()?.takeIf { it.items.isNotEmpty() }
             }
-            CloudstreamHomeCatalog(feeds).takeIf { feeds.isNotEmpty() }
+            if (feeds.isNotEmpty()) {
+                CloudstreamHomeCatalog(feeds)
+            } else {
+                searchHomeFeed(provider, scraper)
+            }
         }
+
+    private suspend fun searchHomeFeed(provider: Any, scraper: PluginScraper): CloudstreamHomeCatalog? {
+        val method = suspendMethod(provider.javaClass, "search", 1) ?: return null
+        val results = withTimeoutOrNull(15_000) {
+            invokeSuspend(provider, method, arrayOf("latest")) as? Iterable<*>
+        } ?: return null
+        val items = results.filterNotNull().mapNotNull { item ->
+            val url = property(item, "url")?.toString().orEmpty()
+            val title = property(item, "name")?.toString().orEmpty()
+            if (url.isBlank() || title.isBlank()) return@mapNotNull null
+            val type = property(item, "type")?.toString().orEmpty()
+            CloudstreamSearchHit(
+                scraperId = scraper.id,
+                scraperName = scraper.name,
+                title = title,
+                url = url,
+                poster = property(item, "posterUrl")?.toString(),
+                mediaType = if (type.contains("series", true) || type.contains("anime", true)) "tv" else "movie",
+                year = property(item, "year")?.toString()?.toIntOrNull(),
+            )
+        }
+        return CloudstreamHomeCatalog(
+            listOf(CloudstreamHomeFeed("Latest from ${scraper.name}", false, items)),
+        ).takeIf { items.isNotEmpty() }
+    }
 
     actual suspend fun load(scraper: PluginScraper, itemUrl: String): CloudstreamLoadedItem? =
         withContext(Dispatchers.IO) {
